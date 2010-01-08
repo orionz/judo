@@ -92,7 +92,7 @@ class CLI < Thor
 	def list(*names)
 		names = ["%"] if names.empty? ## search for all by defaul
 		Sumo::Instance.search(*names).each do |i|
-			printf "%-10s %-12s %-10s %-15s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_type, i.ami, i.elastic_ip || i.hostname, i.ec2_state, i.volumes_json
+			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_type, i.ami, i.elastic_ip || i.hostname, i.ec2_state, i.volumes_json
 		end
 	end
 
