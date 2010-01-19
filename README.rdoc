@@ -1,61 +1,32 @@
 = Tired of wrestling with server provisioning?  Sumo!
 
-Want to fire up a one-off EC2 instance, pronto?  ec2-run-instances got you down?  Try Sumo.
+Want to launch and manage persistent utility servers on EC2?  ec2-run-instances got you down?  Try this:
 
-    $ sumo launch
-    ---> Launching instance...    i-4f809c26 (1.5s)
-    ---> Acquiring hostname...    ec2-67-202-17-178.compute-1.amazonaws.com (26.7s)
+    $ sumo create mybox
+    Created server mybox
+    $ sumo list
+    mybox          i-8a3d05e2  m1.small   ami-1515f67c
+    $ sumo launch mybox
+    ---> Launch server mybox...   done (1.9s)
+    ---> Acquire hostname...      ec2-75-101-254-61.compute-1.amazonaws.com (34.0s)
+    ---> Wait for ssh...          done (3.1s)
 
     Logging you in via ssh.  Type 'exit' or Ctrl-D to return to your local system.
     ------------------------------------------------------------------------------
-    Linux domU-12-31-39-04-31-37 2.6.21.7-2.fc8xen #1 SMP Fri Feb 15 12:39:36 EST 2008 i686
     ...
     root@domU-12-31-39-04-31-37:~# 
-
-Later...
-
-    $ sumo terminate
-    ec2-67-202-17-178.compute-1.amazonaws.com scheduled for termination
-
-You can manage multiple instances via "sumo list" and specifying hostname or instance id as arguments to the ssh or terminate commands.
-
-== Service installation with Chef
-
-The launch command takes an argument, which is a server role (from roles/#{role}.json inside your cookbooks repo):
-
-    $ sumo launch redis
-    ---> Launch instance...       i-b96c73d0 (1.3s)
-    ---> Acquire hostname...      ec2-75-101-191-220.compute-1.amazonaws.com (36.1s)
-    ---> Wait for ssh...          done (9.0s)
-    ---> Bootstrap chef...        done (61.3s)
-    ---> Setup redis...           done (11.9s)
-    ---> Opening firewall...      ports 6379 (5.2s)
-
-    Your instance is exporting the following resources:
-      Redis: redis://:8452cdd98f428c972f08@ec2-75-101-191-220.compute-1.amazonaws.com:6379/0
-
-The instance can assume multiple roles if you like:
-
-    $ sumo launch redis,solr,couchdb
 
 == Setup
 
 Dependencies:
 
-    $ sudo gem install amazon-ec2 thor
+    $ sudo gem install thor aws right_aws
 
 Then create ~/.sumo/config.yml containing:
 
     ---
     access_id: <your amazon access key id>
     access_secret: <your amazon secret access key>
-
-Optional config you can include any of the following in your config.yml:
-
-    user: root
-    ami: ami-ed46a784
-     availability_zone: us-east-1b
-    cookbooks_url: git://github.com/adamwiggins/chef-cookbooks.git
 
 You'll need Bacon and Mocha if you want to run the specs, and Jewler if you want to create gems.
 
