@@ -30,39 +30,47 @@ Then create ~/.sumo/config.yml containing:
 
 You'll need Bacon and Mocha if you want to run the specs, and Jewler if you want to create gems.
 
-== Managing volumes
+== Usage
 
-Create and attach a volume to your running instance:
+Create a named persistent server:
 
-   $ sumo create_volume
-   ---> Create 5MB volume...     vol-8a9c6ae3 (1.1s)
-   $ sumo volumes
-   vol-8a9c6ae3    5MB  available
-   $ sumo attach
-   ---> Attach vol-8a9c6ae3 to i-bc32cbd4 as /dev/sdc1... done (0.6s)
+    $ sumo create mybox
+    Created server mybox
 
-Log in to format and mount the volume:
+See config vars on the server record:
 
-   $ sumo ssh
-   root@ip-10-251-122-175:~# mkfs.ext3 /dev/sdc1
-   mke2fs 1.41.4 (27-Jan-2009)
-   Filesystem label=
-   OS type: Linux
-   Block size=4096 (log=2)
-   ...
-   $ mkdir /myvol
-   $ mount /dev/sdc1 /myvol
-   $ echo "I'm going to persist to a volume" > /myvol/hello.txt
+    $ sumo info mybox
+    mybox:
+       availability_zone:"us-east-1d"
+       ami32:"ami-1515f67c"
+       user:"ubuntu"
+       key_name:"sumo"
+       ami64:"ami-ab15f6c2"
+       user_data:""
+       security_group:"sumo"
+       instance_size:"m1.small"
 
-To detach from a running instance (perhaps so you can attach elsewhere):
+Set config vars before launch:
 
-   $ sumo detatch
-   ---> Detach vol-8a9c6ae3...   done (0.6s)
+    $ sumo set mybox --instance-size c1.medium
 
-Destroy it if you no longer want the data stored on it:
+Create a static IP address and/or volumes:
 
-   $ sumo destroy_volume
-   ---> Destroy volume...        done (0.8s)
+    $ sumo attach_ip mybox
+    $ sumo attach_volume mbox 50 /dev/sdh1
+
+Launch an instance of the server:
+
+    $ sumo launch mybox
+    ---> Launch server mybox...
+
+You may want to spin down the server if it's not in use:
+
+    $ sumo stop mybox
+
+...and bring it up again later:
+
+    $ sumo start mybox
 
 == Some details you might want to know
 
@@ -70,23 +78,11 @@ Sumo creates its own keypair named sumo, which is stored in ~/.ssh/keypair.pem. 
 
 It will also create an Amazon security group called sumo, so that it can lower the firewall for services you configure via cookbook roles.
 
-If you run any production machines from your EC2 account, I recommend setting up a separate account for use with Sumo.  It does not prompt for confirmation when terminating an instance or differentiate between instances started by it vs. instances started by other tools.
-
-== Anti-features
-
-Sumo is not a cloud management tool, a monitor tool, or anything more than a way to get an instance up right quick.  If you're looking for a way to manage a cluster of production instances, try one of these fine tools.
-
-* Pool Party
-* RightScale
-* Engine Yard Cloud
-* Cloudkick
-
 == Meta
 
-Created by Adam Wiggins
+Created by Adam Wiggins and Orion Henry
 
-Patches contributed by Orion Henry, Blake Mizerany, Jesse Newland, Gert Goet,
-and Tim Lossen
+Patches contributed by Blake Mizerany, Jesse Newland, Gert Goet, and Tim Lossen
 
 Released under the MIT License: http://www.opensource.org/licenses/mit-license.php
 
