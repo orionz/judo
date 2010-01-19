@@ -2,10 +2,10 @@ module Sumo
 	module Config
 		extend self
 
-		def instance_defaults
+		def server_defaults
 			{
 				:key_name => key_name,
-				:instance_type => instance_type,
+				:instance_size => instance_size,
 				:ami32 => ami32,
 				:ami64 => ami64,
 				:user => user,
@@ -24,7 +24,7 @@ module Sumo
 		end
 
 		def ia32?
-			["m1.small", "c1.medium"].include?(instance_type)
+			["m1.small", "c1.medium"].include?(instance_size)
 		end
 
 		def ia64?
@@ -43,8 +43,8 @@ module Sumo
 			config['availability_zone'] || 'us-east-1d'
 		end
 
-		def instance_type
-			config['instance_type'] || 'm1.small'
+		def instance_size
+			config['instance_size'] || 'm1.small'
 		end
 
 		def access_id
@@ -88,16 +88,16 @@ module Sumo
 
 		def one_time_setup
 			puts "ONE TIME SETUP"
-			Sumo::Instance.create_domain
+			Sumo::Server.create_domain
 		end
 
 		def purge
 			puts "PURGE"
-			Sumo::Instance.delete_domain
+			Sumo::Server.delete_domain
 		end
 
 		def setup?
-			Sumo::Instance.connection.list_domains[:domains].include? Sumo::Instance.domain
+			Sumo::Server.connection.list_domains[:domains].include? Sumo::Server.domain
 		end
 
 		private

@@ -1,6 +1,6 @@
 module Sumo
-	class Instance < Aws::ActiveSdb::Base
-		set_domain_name :sumo_instance
+	class Server < Aws::ActiveSdb::Base
+		set_domain_name :sumo_server
 
 		@@ec2_list = Config.ec2.describe_instances
 
@@ -29,7 +29,7 @@ module Sumo
 		end
 
 		def all_attrs
-			[:name, :ami32, :ami64, :instance_type, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_json, :elastic_ip, :user_data]
+			[:name, :ami32, :ami64, :instance_size, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_json, :elastic_ip, :user_data]
 		end
 
 		def initialize(attrs={})
@@ -37,11 +37,11 @@ module Sumo
 		end
 
 		def defaults
-			uniq_values(Config.instance_defaults)
+			uniq_values(Config.server_defaults)
 		end
 
 		def self.all
-			@@all ||= Instance.find(:all)
+			@@all ||= Server.find(:all)
 		end
 
 		def self.untracked
@@ -78,7 +78,6 @@ module Sumo
 
 		def ec2_instance
 			@ec2 ||= Config.ec2.describe_instances([instance_id]).first rescue {}
-#			@@ec2_list.detect { |i| i[:aws_instance_id] == instance_id }
 		end
 
 		def running?
@@ -90,7 +89,7 @@ module Sumo
 			Config.validate ## FIXME
 
 			result = Config.ec2.launch_instances(ami, 
-				:instance_type => instance_type, 
+				:instance_type => instance_size, 
 				:availability_zone => availability_zone,
 				:key_name => key_name,
 				:group_ids => [security_group],
@@ -108,7 +107,7 @@ module Sumo
 		end
 
 		def terminate
-			Config.ec2.terminate_instances([ instance_id ])
+			Config.ec2.terminate_servers([ instance_id ])
 			wait_for_termination if volumes.size > 0
 			update_attributes! :instance_id => nil
 			"#{instance_id} scheduled for termination"
@@ -123,7 +122,7 @@ module Sumo
 		end
 
 		def ia32?
-			["m1.small", "c1.medium"].include?(instance_type)
+			["m1.small", "c1.medium"].include?(instance_size)
 		end
 
 		def ia64?
@@ -191,7 +190,7 @@ module Sumo
 		end
 
 		def add_volume(volume_id, device)
-			abort("Instance already has a volume on that device") if volumes[device]
+			abort("Server already has a volume on that device") if volumes[device]
 			## TODO make sure its not attached to someone else
 			volumes[device] = volume_id
 			self[:volumes_json] = volumes.to_json
@@ -202,12 +201,12 @@ module Sumo
 		def connect_ssh
 			system "ssh -i #{Sumo::Config.keypair_file} #{user}@#{hostname}"
 			if $?.success?
-				puts "\nType 'sumo terminate' if you're done with this instance."
+				puts "\nType 'sumo terminate' if you're done with this server."
 			end
 		end
 		
 		def self.attrs
-			[:ami32, :ami64, :instance_type, :availability_zone, :key_name, :security_group, :user, :user_data]
+			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data]
 		end
 
 		def refresh
@@ -218,7 +217,7 @@ module Sumo
 
 		def to_hash
 			hash = {}
-			Instance.attrs.each { |key| hash[key] = self.send(key) }
+			Server.attrs.each { |key| hash[key] = self.send(key) }
 			hash
 		end
 

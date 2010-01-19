@@ -7,10 +7,10 @@ Sumo::Config.connect
 require 'thor'
 
 class CLI < Thor
-	desc "launch [NAMES]", "launch one or more instances"
+	desc "launch [NAMES]", "launch one or more servers"
 	def launch(*names)
-		Sumo::Instance.search(*names).each do |inst|
-			task("Launch instance #{inst.name}") { inst.start }
+		Sumo::Server.search(*names).each do |inst|
+			task("Launch server #{inst.name}")   { inst.start }
 			task("Acquire hostname")             { inst.wait_for_hostname }
 			task("Wait for ssh")                 { inst.wait_for_ssh }
 			task("Attaching ip")                 { inst.attach_ip } if inst.elastic_ip
@@ -18,69 +18,69 @@ class CLI < Thor
 		end
 	end
 
-	desc "ssh [NAMES]", "ssh to a specified instance or first available"
+	desc "ssh [NAMES]", "ssh to a specified server or first available"
 	def ssh(*names)
-		Sumo::Instance.search(*names).each do |inst|
+		Sumo::Server.search(*names).each do |inst|
 			inst.refresh
 			if inst.running?
 				inst.wait_for_ssh
 				inst.connect_ssh
 			else
-				puts "Instance #{inst.name} not running"
+				puts "Server #{inst.name} not running"
 			end
 		end
 	end
 
-	desc "create NAME --opt1=value1 --opt2=value2", "create a persistent instance"
-	Sumo::Instance.attrs.each do |a|
+	desc "create NAME --opt1=value1 --opt2=value2", "create a persistent server"
+	Sumo::Server.attrs.each do |a|
 		method_option a, :type => :string, :default => nil, :required => false
 	end
 	def create(name)
-		inst = Sumo::Instance.find_by_name(name)
+		inst = Sumo::Server.find_by_name(name)
 		abort("Already a server by that name") unless inst.nil?
-		Sumo::Instance.create options.merge(:name => name)
+		Sumo::Server.create options.merge(:name => name)
 	end
 
-	desc "restart [NAME]", "start a persistent instance"
+	desc "restart [NAME]", "start a persistent server"
 	def restart(*names)
-		Sumo::Instance.search(*names).each do |inst|
-			task("Stopping instance #{inst.name}") { inst.terminate } if inst.running?
-			task("Starting instance #{inst.name}") { inst.start }
+		Sumo::Server.search(*names).each do |inst|
+			task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
+			task("Starting server #{inst.name}") { inst.start }
 		end
 	end
 
-	desc "stop [NAMES]", "stop a persistent instance"
+	desc "stop [NAMES]", "stop a persistent server"
 	def stop(*names)
-		Sumo::Instance.search(*names).each do |inst|
+		Sumo::Server.search(*names).each do |inst|
 			if inst.running?
-				task("Stopping instance #{inst.name}") { inst.terminate } if inst.running?
+				task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
 			else
-				puts "Instance #{inst.name} not running"
+				puts "Server #{inst.name} not running"
 			end
 		end
 	end
 
-	desc "destroy NAME", "destroy a persistent instance"
+	desc "destroy NAME", "destroy a persistent server"
 	def destroy(*names)
-		Sumo::Instance.search(*names).each do |inst|
-			task("Stopping instance #{inst.name}") { inst.terminate } if inst.running?
-			task("Destroying instance #{inst.name}") { inst.destroy }
+		Sumo::Server.search(*names).each do |inst|
+			task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
+			task("Destroying server #{inst.name}") { inst.destroy }
 		end
 	end
 
-	desc "set [NAMES] --opt1=value1 --opt2=value2", "set config var for an instance"
-	Sumo::Instance.attrs.each do |a|
+	desc "set [NAMES] --opt1=value1 --opt2=value2", "set config var for an server"
+	Sumo::Server.attrs.each do |a|
 		method_option a, :type => :string, :default => nil, :required => false
 	end
 	def set(*names)
-		Sumo::Instance.search(*names).each do |inst|
+		Sumo::Server.search(*names).each do |inst|
 			inst.update_attributes!(options)
 		end
 	end
 		
-	desc "info [NAMES]", "show instance config"
+	desc "info [NAMES]", "show server config"
 	def info(*names)
-		Sumo::Instance.search(*names).each do |inst|
+		Sumo::Server.search(*names).each do |inst|
 			puts "#{inst.name}:"
 			inst.to_hash.each do |key,value|
 				puts "	#{key.to_s}:#{value.to_s.inspect}"
@@ -88,17 +88,17 @@ class CLI < Thor
 		end
 	end
 
-	desc "list [<NAMES>]", "list all instances"
+	desc "list [<NAMES>]", "list all servers"
 	def list(*names)
 		names = ["%"] if names.empty? ## search for all by defaul
-		Sumo::Instance.search(*names).each do |i|
-			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_type, i.ami, i.elastic_ip || i.hostname, i.ec2_state, i.volumes_json
+		Sumo::Server.search(*names).each do |i|
+			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_size, i.ami, i.elastic_ip || i.hostname, i.ec2_state, i.volumes_json
 		end
 	end
 
-	desc "console [NAME]", "get console output for instance or first available"
+	desc "console [NAME]", "get console output for server or first available"
 	def console(*names)
-		Sumo::Instance.search(*names).each do |inst|
+		Sumo::Server.search(*names).each do |inst|
 			puts inst.console_output if inst.running?
 		end
 	end
@@ -117,19 +117,19 @@ class CLI < Thor
 		end
 	end
 
-	desc "attach_ip NAME", "attach (and create if not specified) an IP to instance"
+	desc "attach_ip NAME", "attach (and create if not specified) an IP to server"
 	def attach_ip(name)
-		inst = find_instance(name)
+		inst = find_server(name)
 		ip = Sumo::Config.ec2.allocate_address
 		inst.add_ip(ip)
 	end
 
 	desc "attach_volume NAME (MEGABYTES | VOLUME) DEVICE", "creates an ec2 volume of the specified size"
 	def attach_volume(name, vs, device)
-		inst = find_running_instance(name)
+		inst = find_running_server(name)
 		vol = vs if vs =~ /^vol/
 		vol ||= task("Create a #{vs}MB volume") { Sumo::Config.ec2.create_volume(nil, vs, inst.availability_zone)[:aws_id] }
-		task("Add Volume to Instance") { inst.add_volume(vol, device) }
+		task("Add Volume to Server") { inst.add_volume(vol, device) }
 	end
 
 	desc "delete_volume VOLUME_ID", "deletes an ec2 volume"
@@ -143,15 +143,15 @@ class CLI < Thor
 		Sumo::Config.purge
 	end
 
-	desc "detach NAME VOLUME_ID", "detaches volume from instance"
+	desc "detach NAME VOLUME_ID", "detaches volume from server"
 	def detach(name, volume)
-		inst = find_instance(name)
+		inst = find_server(name)
 		task("Detaching #{volume}") { Sumo::Config.ec2.detach_volume(volume) }
 	end
 
-	desc "duplicate [NAME] [NEWNAME]", "duplicate named instance to newname"
+	desc "duplicate [NAME] [NEWNAME]", "duplicate named server to newname"
 	def duplicate(name, newname)
-		inst = Sumo::Instance.search(name).first
+		inst = Sumo::Server.search(name).first
 		task("Duplicating #{inst}") do
 			dupe = inst.duplicate(newname)
 			dupe.save
@@ -159,27 +159,27 @@ class CLI < Thor
 	end
 
 	no_tasks do
-		def find_idle_instance(name)
+		def find_idle_server(name)
 			if name
-				Sumo::Instance.find_by_name(name) || abort("No such instance")
+				Sumo::Server.find_by_name(name) || abort("No such server")
 			else
-				Sumo::Instance.find(:all).detect { |i| not i.running? } || abort("No idle instances")
+				Sumo::Server.find(:all).detect { |i| not i.running? } || abort("No idle servers")
 			end
 		end
 
-		def find_running_instance(name)
+		def find_running_server(name)
 			if name
-				Sumo::Instance.find_by_name(name) || abort("No such instance")
+				Sumo::Server.find_by_name(name) || abort("No such server")
 			else
-				Sumo::Instance.find(:all).detect { |i| i.running? } || abort("No running instances")
+				Sumo::Server.find(:all).detect { |i| i.running? } || abort("No running servers")
 			end
 		end
 
-		def find_instance(name)
+		def find_server(name)
 			if name
-				Sumo::Instance.find_by_name(name) || abort("No such instances")
+				Sumo::Server.find_by_name(name) || abort("No such servers")
 			else
-				Sumo::Instance.find(:all).first || abort("No instances")
+				Sumo::Server.find(:all).first || abort("No servers")
 			end
 		end
 
@@ -196,7 +196,7 @@ class CLI < Thor
 
 		def instance_id_to_sumo(instance_id)
 			result = "" if instance_id.nil?
-			result ||= Sumo::Instance.all.detect { |i| i.instance_id == instance_id }
+			result ||= Sumo::Server.all.detect { |i| i.instance_id == instance_id }
 			result ||= instance_id
 		end
 	end

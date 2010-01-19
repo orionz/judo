@@ -7,4 +7,4 @@ require 'socket'
 require 'json'
 
 require File.dirname(__FILE__) + '/config'
-require File.dirname(__FILE__) + '/instance'
+require File.dirname(__FILE__) + '/server'
