@@ -39,9 +39,10 @@ class CLI < Thor
 		inst = Sumo::Server.find_by_name(name)
 		abort("Already a server by that name") unless inst.nil?
 		Sumo::Server.create options.merge(:name => name)
+		puts "Created server #{name}"
 	end
 
-	desc "restart [NAME]", "start a persistent server"
+	desc "restart NAME", "restart a running server"
 	def restart(*names)
 		Sumo::Server.search(*names).each do |inst|
 			task("Stopping server #{inst.name}") { inst.terminate } if inst.running?

@@ -107,7 +107,7 @@ module Sumo
 		end
 
 		def terminate
-			Config.ec2.terminate_servers([ instance_id ])
+			Config.ec2.terminate_instances([ instance_id ])
 			wait_for_termination if volumes.size > 0
 			update_attributes! :instance_id => nil
 			"#{instance_id} scheduled for termination"
@@ -200,9 +200,6 @@ module Sumo
  
 		def connect_ssh
 			system "ssh -i #{Sumo::Config.keypair_file} #{user}@#{hostname}"
-			if $?.success?
-				puts "\nType 'sumo terminate' if you're done with this server."
-			end
 		end
 		
 		def self.attrs
