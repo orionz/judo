@@ -29,7 +29,7 @@ module Sumo
 		end
 
 		def all_attrs
-			[:name, :ami32, :ami64, :instance_size, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_json, :elastic_ip, :user_data]
+			[:name, :ami32, :ami64, :instance_size, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_json, :elastic_ip, :user_data, :boot_scripts]
 		end
 
 		def initialize(attrs={})
@@ -203,7 +203,7 @@ module Sumo
 		end
 		
 		def self.attrs
-			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data]
+			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
 		end
 
 		def refresh
