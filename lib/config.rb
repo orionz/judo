@@ -99,6 +99,14 @@ module Sumo
 		def setup?
 			Sumo::Server.connection.list_domains[:domains].include? Sumo::Server.domain
 		end
+		
+		def upload_script(filename)
+			scripts_bucket.put(File.basename(filename), File.new(filename,"r").read)
+		end
+		
+		def list_scripts
+			puts scripts_bucket.keys
+		end
 
 		private
 
@@ -130,6 +138,15 @@ module Sumo
 			ec2.create_security_group('sumo', 'Sumo')
 			ec2.authorize_security_group_IP_ingress("sumo", 22, 22,'tcp','0.0.0.0/0')
 		rescue Aws::AwsError
+		end
+		
+		def s3
+			@s3 ||= RightAws::S3.new(access_id, access_secret, :logger => Logger.new(nil))
+		end
+		
+		def scripts_bucket
+			name = access_id # is this a bad idea for some reason?
+			@scripts_bucket ||= s3.bucket(name, true)
 		end
 	end
 end

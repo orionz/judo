@@ -158,7 +158,19 @@ class CLI < Thor
 			dupe.save
 		end
 	end
+	
+	desc "upload_script FILENAME", "upload a boot script to S3"
+	def upload_script(filename)
+		task("Uploading #{filename}") do
+			Sumo::Config.upload_script(filename)
+		end
+	end
 
+	desc "list_scripts", "list all boot scripts in S3"
+	def list_scripts()
+		Sumo::Config.list_scripts()
+	end
+	
 	no_tasks do
 		def find_idle_server(name)
 			if name
