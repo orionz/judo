@@ -93,7 +93,7 @@ module Sumo
 				:availability_zone => availability_zone,
 				:key_name => key_name,
 				:group_ids => [security_group],
-				:user_data => user_data).first
+				:user_data => generate_user_data).first
 
 			update_attributes! :instance_id => result[:aws_instance_id]
 		end
@@ -215,6 +215,7 @@ module Sumo
 		def to_hash
 			hash = {}
 			Server.attrs.each { |key| hash[key] = self.send(key) }
+			hash[:user_data] = generate_user_data
 			hash
 		end
 
@@ -224,6 +225,15 @@ module Sumo
 				params[key.to_sym] = value if self.class.attrs.include? key.to_sym
 			end
 			self.class.new params
+		end
+
+		def generate_user_data
+			return user_data unless boot_scripts
+			s = "#!/bin/sh\n"
+			boot_scripts.split(',').each do |script|
+				s += "curl -s \"#{Config.temp_script_url(script)}\" | sh\n"
+			end
+			s
 		end
 	end
 end

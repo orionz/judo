@@ -81,9 +81,9 @@ class CLI < Thor
 		
 	desc "info [NAMES]", "show server config"
 	def info(*names)
-		Sumo::Server.search(*names).each do |inst|
-			puts "#{inst.name}:"
-			inst.to_hash.each do |key,value|
+		Sumo::Server.search(*names).each do |server|
+			puts "#{server.name}:"
+			server.to_hash.each do |key,value|
 				puts "	#{key.to_s}:#{value.to_s.inspect}"
 			end
 		end

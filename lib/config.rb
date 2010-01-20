@@ -105,7 +105,13 @@ module Sumo
 		end
 		
 		def list_scripts
-			puts scripts_bucket.keys
+			scripts_bucket.keys.each do |k|
+				puts k, self.temp_script_url(k.to_s)
+			end
+		end
+
+		def self.temp_script_url(key, expires=300)
+			scripts_bucket.s3.interface.get_link(scripts_bucket.to_s, key, Time.now.to_i + expires)
 		end
 
 		private
