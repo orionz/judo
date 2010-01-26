@@ -6,19 +6,22 @@ module Sumo
 
 		def self.search(*names)
 			query = names.map { |name| name =~ /(^%)|(%$)/ ? "name like ?" : "name = ?" }.join(" or ")
-			puts names.unshift(query).inspect
 			self.select(:all, :conditions => names.unshift(query))
 		end
 		
-		def self.get_or_create(name)
-			server = self.select(:first, :conditions => ["name = ?", name])
+		def self.get_or_create(options)
+			server = self.select(:first, :conditions => ["name = ?", options[:name]])
 			return server if server
-			
-			server = Sumo::Server.new :name => name
+			puts options
+			server = Sumo::Server.new :name => options[:name]
 			if server.domain?
-				server[:elastic_ip] = Sumo::Config.ec2.allocate_address
+				options[:elastic_ip] = Sumo::Config.ec2.allocate_address
+				server.update_attributes! options
+				server.create_zerigo_host
+			else
+				server.update_attributes! options
 			end
-
+			
 			return server
 		end
 		
@@ -198,6 +201,11 @@ module Sumo
 			Config.ec2.associate_address(instance_id, elastic_ip)
 			refresh
 		end
+		
+		def dns_name
+			return nil unless self[:elastic_ip]
+			`dig +short -x #{self[:elastic_ip]}`.strip
+		end
 
 		def attach_volumes
 			return unless running?
@@ -255,6 +263,62 @@ module Sumo
 
 		def domain?
 			name.include? '.'
+		end
+		
+		def create_zerigo_host
+			Zerigo::DNS::Base.user = Config.zerigo_user
+			Zerigo::DNS::Base.api_key = Config.zerigo_api_key
+
+			# find zone if exists
+			zone = host = nil
+			Zerigo::DNS::Zone.all().each do |z|
+				if z.domain == name
+					zone = z
+					puts "  Zone #{zone.domain} found with id #{zone.id}."
+					break
+				end
+			end
+
+			if not zone
+				begin
+					zone = Zerigo::DNS::Zone.create({:domain => name, :ns_type => 'pri_sec'})
+					puts "  Zone #{zone.domain} created successfully with id #{zone.id}."
+				rescue ResourceParty::ValidationError => e
+					puts "  There was an error saving the new zone."
+					puts e.message.join(', ')+'.'
+				end
+			end
+			
+			if not zone
+				puts "ERROR: Could not create Zone for #{name}."
+				return
+			end
+			
+			Zerigo::DNS::Host.all(:zone_id=>zone.id).each do |h|
+				if h.hostname == nil
+					host = h
+					break
+				end
+			end
+			
+			host_props = { 
+				:hostname => '',
+				:host_type => 'A',
+				:data => elastic_ip,
+				:zone_id => zone.id
+			}
+			
+			begin
+				if host
+					host.update(host_props) if host
+				else
+					host = Zerigo::DNS::Host.create(host_props)
+				end
+				puts "  Host #{host.hostname} updated with id #{host.id}."
+			rescue ResourceParty::ValidationError => e
+				puts "  There was an error saving the new host."
+				puts e.message.join(', ')+'.'
+			end
 		end
 	end
 end

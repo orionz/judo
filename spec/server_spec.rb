@@ -5,19 +5,28 @@ describe Sumo::Server do
 		# configure AWS stubs
 		Sumo::Config.ec2.stubs(:allocate_address).returns('192.168.2.2')
 		Sumo::Server.stubs(:select).returns(nil)
-		@server = Sumo::Server.get_or_create('example.com')
+		Sumo::Server.stubs(:update_attributes!).returns(true)
+		@server = Sumo::Server.get_or_create(:name => 'example.com')
+		@server.stubs(:dns_name).returns('ec2-192-168-2-2.compute-1.amazonaws.com.')
+		
+		# configure zerigo stubs
 	end
 	
 	it "creates a new server" do
-		server = Sumo::Server.get_or_create('example')
+		server = Sumo::Server.get_or_create(:name => 'example')
 		server.name.should == 'example'
 		server.elastic_ip.should == nil
 	end
 	
 	it "creates a new domain" do
-		server = Sumo::Server.get_or_create('example.com')
+		server = Sumo::Server.get_or_create(:name => 'example.com')
 		server.name.should == 'example.com'
 		server.elastic_ip.should == '192.168.2.2'
+	end
+	
+	it "configures DNS for a new domain" do
+		@server.elastic_ip.should == '192.168.2.2'
+		@server.dns_name.should == "ec2-192-168-2-2.compute-1.amazonaws.com."
 	end
 	
 	##

@@ -54,6 +54,14 @@ module Sumo
 		def access_secret
 			config["access_secret"] || ENV["AWS_SECRET_ACCESS_KEY"] || (raise "please define access_secet in #{sumo_config_file} or in the env as AWS_SECRET_ACCESS_KEY")
 		end
+		
+		def zerigo_user
+			config["zerigo_user"] || ENV["ZERIGO_USER"] || (raise "please define zerigo_user in #{sumo_config_file} or in the env as ZERIGO_USER")
+		end
+		
+		def zerigo_api_key
+			config["zerigo_api_key"] || ENV["ZERIGO_API_KEY"] || (raise "please define zerigo_api_key in #{sumo_config_file} or in the env as ZERIGO_API_KEY")
+		end
 
 		def ec2
 			@ec2 ||= Aws::Ec2.new(access_id, access_secret, :logger => Logger.new(nil))

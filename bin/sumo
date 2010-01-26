@@ -8,8 +8,16 @@ require 'thor'
 
 class CLI < Thor
 	desc "test NAME", "test calling stuff with name"
+	Sumo::Server.attrs.each do |a|
+		method_option a, :type => :string, :default => nil, :required => false
+	end
 	def test(name)
-		puts Sumo::Server.get_or_create(name)
+		puts Sumo::Config.ec2.describe_addresses.inspect
+		exit
+		Sumo::Config.ec2.describe_addresses.each do |a|
+			Sumo::Config.ec2.release_address(a[:public_ip]) unless a[:instance_id]
+		end
+		server = Sumo::Server.get_or_create(options.merge(:name => name))
 	end
 	
 	desc "launch [NAMES]", "launch one or more servers"
