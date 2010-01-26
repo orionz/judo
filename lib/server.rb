@@ -6,9 +6,22 @@ module Sumo
 
 		def self.search(*names)
 			query = names.map { |name| name =~ /(^%)|(%$)/ ? "name like ?" : "name = ?" }.join(" or ")
+			puts names.unshift(query).inspect
 			self.select(:all, :conditions => names.unshift(query))
 		end
+		
+		def self.get_or_create(name)
+			server = self.select(:first, :conditions => ["name = ?", name])
+			return server if server
+			
+			server = Sumo::Server.new :name => name
+			if server.domain?
+				server[:elastic_ip] = Sumo::Config.ec2.allocate_address
+			end
 
+			return server
+		end
+		
 		def method_missing(method, *args)
 			if all_attrs.include?(method)
 				if self[method]
@@ -33,7 +46,11 @@ module Sumo
 		end
 
 		def initialize(attrs={})
-			super(defaults.merge(uniq_values(attrs)))
+			super(defaults.merge(uniq_values(attrs)))			
+		end
+		
+		def create(args)
+			super
 		end
 
 		def defaults

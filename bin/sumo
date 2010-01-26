@@ -7,6 +7,11 @@ Sumo::Config.connect
 require 'thor'
 
 class CLI < Thor
+	desc "test NAME", "test calling stuff with name"
+	def test(name)
+		puts Sumo::Server.get_or_create(name)
+	end
+	
 	desc "launch [NAMES]", "launch one or more servers"
 	def launch(*names)
 		Sumo::Server.search(*names).each do |inst|
