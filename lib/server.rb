@@ -235,5 +235,9 @@ module Sumo
 			end
 			s
 		end
+
+		def domain?
+			name.include? '.'
+		end
 	end
 end

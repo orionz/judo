@@ -18,4 +18,12 @@ describe Sumo::Server do
 		dupe.name.should == 'test-copy'
 		dupe.ami32.should == 'abc'
 	end
+
+	it "detects a domain name" do
+		server = Sumo::Server.new :name => 'example'
+		server.domain?.should == false
+
+		server = Sumo::Server.new :name => 'example.com'
+		server.domain?.should == true
+	end
 end
