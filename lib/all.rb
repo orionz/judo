@@ -6,5 +6,7 @@ require 'yaml'
 require 'socket'
 require 'json'
 
+require 'lib/zerigo_dns'
+
 require File.dirname(__FILE__) + '/config'
 require File.dirname(__FILE__) + '/server'
