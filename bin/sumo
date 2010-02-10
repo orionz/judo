@@ -7,8 +7,8 @@ Sumo::Config.connect
 require 'thor'
 
 class CLI < Thor
-	desc "launch [NAMES]", "launch one or more servers"
-	def launch(*names)
+	desc "start [NAMES]", "start one or more servers"
+	def start(*names)
 		Sumo::Server.search(*names).each do |inst|
 			task("Launch server #{inst.name}")   { inst.start }
 			task("Acquire hostname")             { inst.wait_for_hostname }
@@ -47,6 +47,10 @@ class CLI < Thor
 		Sumo::Server.search(*names).each do |inst|
 			task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
 			task("Starting server #{inst.name}") { inst.start }
+			task("Acquire hostname")             { inst.wait_for_hostname }
+			task("Wait for ssh")                 { inst.wait_for_ssh }
+			task("Attaching ip")                 { inst.attach_ip } if inst.elastic_ip
+			task("Attaching volumes")            { inst.attach_volumes } if inst.has_volumes?
 		end
 	end
 
@@ -77,6 +81,14 @@ class CLI < Thor
 		Sumo::Server.search(*names).each do |inst|
 			inst.update_attributes!(options)
 		end
+	end
+
+	desc "user_data NAME FILE", "set user data to the content of a file"
+	def user_data(name, file)
+		inst = find_server(name)
+		data = File.read(file)
+		puts data
+		inst.update_attributes!(:user_data => data)
 	end
 		
 	desc "info [NAMES]", "show server config"
