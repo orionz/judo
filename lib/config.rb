@@ -10,9 +10,33 @@ module Sumo
 				:ami64 => ami64,
 				:user => user,
 				:security_group => security_group,
-				:availability_zone => availability_zone,
-				:state => "offline"
+				:availability_zone => availability_zone,  ## FIXME
+				:state => "offline" ## FIXME
 			}
+		end
+
+		def merged_local_config(name)
+			configs = load_local_config(name)
+			configs.reverse.inject({}) { |sum,conf| sum.merge(conf) }
+		end
+
+		def load_local_config(name, all = [])
+			return (all << JSON.parse(server_defaults.to_json)) if name.nil?
+			conf = read_local_config(name)
+			load_local_config(conf["import"], all << conf)
+		end
+
+		def server_dir
+			config["server_dir"] || sumo_dir
+		end
+
+		def read_local_config(name)
+			begin
+				JSON.parse(File.read(server_dir + "/" + name + "/config.json"))
+			rescue Errno::ENOENT
+#				puts "Warning: no config file for #{name} in #{server_dir}"
+				{}
+			end
 		end
 
 		def security_group
@@ -32,11 +56,11 @@ module Sumo
 		end
 
 		def ami32
-			config["ami32"] || "ami-1515f67c" ## default to ubuntu 9.10 server
+			config["ami32"] || "ami-bb709dd2" ## default to ubuntu 9.10 server
 		end
 
 		def ami64
-			config["ami64"] || "ami-ab15f6c2" ## default to ubuntu 9.10 server
+			config["ami64"] || "ami-55739e3c" ## default to ubuntu 9.10 server
 		end
 
 		def availability_zone
@@ -82,7 +106,7 @@ module Sumo
 
 			if k.nil? 
 				if key_name == "sumo"
-					create_keypair
+					create_keypair  ## FIXME - do not create if it exists - tell the user to download and it and put it int the .sumo dir
 				else
 					raise "cannot use key_pair #{key_name} b/c it does not exist"
 				end
@@ -133,6 +157,8 @@ module Sumo
 		end
 
 		def sumo_dir
+			## FIXME -- I would love it if we could look for a sumo.yml in the ../../../../ by default - then look in HOME/.sumo next
+			## this way we could have our servers and .gitignore sumo.yml and have different clouds in different dirs with different credentials...
 			"#{ENV['HOME']}/.sumo"
 		end
 

@@ -6,65 +6,102 @@ module Sumo
 
 		def self.search(*names)
 			query = names.map { |name| name =~ /(^%)|(%$)/ ? "name like ?" : "name = ?" }.join(" or ")
-			results = self.select(:all, :conditions => names.unshift(query))
-			raise "No such server" if results.empty?
-			results
-		end
-		
-		def self.get_or_create(options)
-			server = self.select(:first, :conditions => ["name = ?", options[:name]])
-			return server if server
-			puts options
-			server = Sumo::Server.new :name => options[:name]
-			if server.domain?
-				options[:elastic_ip] = Sumo::Config.ec2.allocate_address
-				server.update_attributes! options
-				server.create_zerigo_host
-			else
-				server.update_attributes! options
-			end
-			
-			return server
-		end
-
-		def to_options
-			options = {}
-			Sumo::Server.attrs.each do |attr|
-				options[attr.to_s] = self[attr]
-			end
-			options
-		end
-
-		def cp(new_name, options = {})
-			puts self.to_options.merge(options).merge(:name => new_name).inspect
-			volumes.each do |dev,vol_id|
-			end
-			new_server = Sumo::Server.new self.to_options.merge(options).merge(:name => new_name)
-			new_server.save
-			Sumo::Config.ec2.describe_volumes(volumes.values).each do |aws_vol|
-				dev = volumes.invert[aws_vol[:aws_id]]
-				size = aws_vol[:aws_size]
-				volume_id = Sumo::Config.ec2.create_volume(nil, size, new_server.availability_zone)[:aws_id]
-				puts "creating volume #{volume_id} #{dev} #{size}"
-				new_server.add_volume(volume_id, dev)
-			end unless volumes.empty?
-			if has_ip?
-				new_server.add_ip(Sumo::Config.ec2.allocate_address)
-				puts "allocate ip address #{new_server.elastic_ip}"
+			results = self.select(:all, :conditions => [ query, *names ])
+			names.map do |n|
+				results.detect { |r| r.name == n } or abort("No such server '#{n}'")
 			end
 		end
 		
-		def method_missing(method, *args)
-			if all_attrs.include?(method)
-				if @attributes[method.to_s]
-					@attributes[method.to_s].first
-				else
-					nil
+		def name
+			state["name"]
+		end
+
+		def instance_size
+			config["instance_size"]
+		end
+
+		def config
+			# old_config = [:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
+			@config ||= Sumo::Config.merged_local_config(name)
+		end
+
+		def state
+			stringify_keys_and_vals(@attributes)
+		end
+
+		def stringify_keys_and_vals(hash)
+			hash.inject({}) do |options, (key, value)|
+				options[key.to_s] = value.to_s
+				options
+			end
+		end
+
+		## FIXME - how do I handle deleting ip/drives
+		def needs_init
+			return true if config["elastic_ip"] and not state["elastic_ip"]
+			if config["volumes"]
+				config["volumes"].each do |volume_config|
+					device = volume_config["device"]
+					return true if not volumes["device"]
 				end
-			else
-				super(method, @args)
+			end
+			false
+		end
+
+		def init_resources
+			if config["volumes"]
+				config["volumes"].each do |volume_config|
+					device = volume_config["device"]
+					size = volume_config["size"]
+					if not volumes[device]
+						task("Creating EC2 Volume #{device} #{size}") do
+							volume_id = Sumo::Config.ec2.create_volume(nil, size, config["availability_zone"])[:aws_id]
+							add_volume(volume_id, device)
+						end
+					else
+						puts "Volume #{device} already exists."
+					end
+				end
+			end
+
+			begin
+				if config["elastic_ip"] and not state["elastic_ip"]
+					task("Adding an elastic ip") { add_ip(Sumo::Config.ec2.allocate_address) }
+				else
+					puts "Elastic ip #{settings["elastic_ip"]} already exists."
+				end
+			rescue Aws::AwsError => e
+				if e.message =~ /AddressLimitExceeded/
+					abort "Failed to allocate ip address: Limit Exceeded"
+				else
+					raise
+				end
 			end
 		end
+
+		def task(msg, &block)
+			printf "---> %-24s ", "#{msg}..."
+			STDOUT.flush
+			start = Time.now
+			result = block.call
+			result = "done" unless result.is_a? String
+			finish = Time.now
+			time = sprintf("%0.1f", finish - start)
+			puts "#{result} (#{time}s)"
+			result
+		end
+
+#		def method_missing(method, *args)
+#			if all_attrs.include?(method)
+#				if @attributes[method.to_s]
+#					@attributes[method.to_s].first
+#				else
+#					nil
+#				end
+#			else
+#				super(method, @args)
+#			end
+#		end
 
 		def update_attributes!(args)
 			args.each do |key,value|
@@ -73,41 +110,17 @@ module Sumo
 			save
 		end
 
-		def fix
-			(JSON.load(volumes_json) rescue {}).each do |device,volume_id|
-				reload
-				@attributes["volumes_flat"] = "#{device}:#{volume_id}"
-				put
-			end
-		end
-
-		def all_attrs
-			[:name, :ami32, :ami64, :instance_size, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_flat, :volumes_json, :elastic_ip, :user_data, :boot_scripts]
-		end
-
-		def initialize(attrs={})
-			super(defaults.merge(uniq_values(attrs)))			
-		end
-		
-		def create(args)
-			super
-		end
-
-		def defaults
-			uniq_values(Config.server_defaults)
+		def before_create ## FIXME make this work -- also check for validate functions in the api
+ #	 	abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
+			task("Creating server #{attrs[:name]}") { super(attrs) }
 		end
 
 		def self.all
 			@@all ||= Server.find(:all)
 		end
 
-		def self.untracked
-			ids = all.map { |a| a.instance_id }
-			@@ec2_list.reject { |e| e[:aws_state] == "terminated" or ids.include?(e[:aws_instance_id]) }
-		end
-
 		def has_ip?
-			elastic_ip
+			state["elastic_ip"]
 		end
 
 		def has_volumes?
@@ -119,21 +132,19 @@ module Sumo
 		end
 
 		def destroy
-			delete
-			volumes.each { |dev,v| Sumo::Config.ec2.delete_volume(v) }
-			Sumo::Config.ec2.release_address(elastic_ip) if has_ip?
+			stop if running?
+			task("Deleting Elastic Ip") { Sumo::Config.ec2.release_address(state["elastic_ip"]) } if has_ip?
+			volumes.each { |dev,v| remove_volume(v,dev) }
+			task("Destroying server #{name}") { super }
+			## FIXME - should we delete the server folder and config on disk?
 		end
-
-#		def before_save
-#			self["volumes_json"] = volumes.to_json
-#		end
 
 		def ec2_state
 			ec2_instance[:aws_state] rescue "offline"
 		end
 
 		def ec2_instance
-			@ec2 ||= Config.ec2.describe_instances([instance_id]).first rescue {}
+			@ec2 ||= Config.ec2.describe_instances([state["instance_id"]]).first rescue {}
 		end
 
 		def running?
@@ -142,39 +153,48 @@ module Sumo
 		end
 
 		def start
+			task("Starting server #{name}")      { start }
+			task("Acquire hostname")             { wait_for_hostname }
+			task("Wait for ssh")                 { wait_for_ssh }
+			task("Attaching ip")                 { attach_ip } if state["elastic_ip"]
+			task("Attaching volumes")            { attach_volumes } if has_volumes?
+		end
+
+		def restart
+			stop
+			start
+		end
+
+		def stop
+			if running?
+				instance_id = state["instance_id"]
+				task("Terminating instance") { Config.ec2.terminate_instances([ instance_id ]) } 
+				update_attributes! :instance_id => nil
+				task("Wait for volumes to detach") { wait_for_termination(instance_id) } if volumes.size > 0	
+			else
+				puts "Server #{name} not running"
+			end
+		end
+
+		def start
 			Config.validate ## FIXME
 
 			result = Config.ec2.launch_instances(ami,
-				:instance_type => instance_size,
-				:availability_zone => availability_zone,
-				:key_name => key_name,
-				:group_ids => [security_group],
+				:instance_type => config["instance_size"],
+				:availability_zone => config["availability_zone"], ### FIXME
+				:key_name => config["key_name"],
+				:group_ids => [config["security_group"]],
 				:user_data => generate_user_data).first
 
 			update_attributes! :instance_id => result[:aws_instance_id]
 		end
 
-		def launch
-			start
-			wait_for_hostname
-			wait_for_ssh
-			attach_ip
-			attach_volumes
-		end
-
-		def terminate
-			Config.ec2.terminate_instances([ instance_id ])
-			wait_for_termination if volumes.size > 0
-			update_attributes! :instance_id => nil
-			"#{instance_id} scheduled for termination"
-		end
-
 		def console_output
-			Config.ec2.get_console_output(instance_id)[:aws_output]
+			Config.ec2.get_console_output(state["instance_id"])[:aws_output]
 		end
 
 		def ami
-			ia32? ? ami32 : ami64
+			ia32? ? config["ami32"] : config["ami64"]
 		end
 
 		def ia32?
@@ -191,13 +211,13 @@ module Sumo
 
 		def wait_for_hostname
 			loop do
-				refresh
+				reload
 				return hostname if hostname
 				sleep 1
 			end
 		end
 
-		def wait_for_termination
+		def wait_for_termination(instance_id)
 			loop do
 				ec2 = Config.ec2.describe_instances.detect { |i| i[:aws_instance_id] == instance_id }
 				break if ec2[:aws_state] == "terminated"
@@ -233,45 +253,54 @@ module Sumo
 		end
 
 		def attach_ip
-			return unless running? and elastic_ip
-			Config.ec2.associate_address(instance_id, elastic_ip)
-			refresh
+			return unless running? and state["elastic_ip"]
+			Config.ec2.associate_address(state["instance_id"], state["elastic_ip"])
+			reload
 		end
 		
 		def dns_name
-			return nil unless self[:elastic_ip]
-			`dig +short -x #{self[:elastic_ip]}`.strip
+			return nil unless state["elastic_ip"]
+			`dig +short -x #{state["elastic_ip"]}`.strip
 		end
 
 		def attach_volumes
 			return unless running?
 			volumes.each do |device,volume_id|
-				Config.ec2.attach_volume(volume_id, instance_id, device)
+				Config.ec2.attach_volume(volume_id, state["instance_id"], device)
+			end
+		end
+
+		def remove_volume(volume_id, device)
+			task("Deleting #{device} #{volume_id}") do
+				Sumo::Config.ec2.delete_volume(volume_id)
+				delete_values( :volumes_flat => "#{device}:#{volume_id}" )
 			end
 		end
 
 		def add_volume(volume_id, device)
 			abort("Server already has a volume on that device") if volumes[device]
-			## TODO make sure its not attached to someone else
-			## delete_values( :volumes_flat => "#{device}:#{volume_id}" ) ## to remove
 			reload
 			@attributes["volumes_flat"] = "#{device}:#{volume_id}"
 			put
-			Config.ec2.attach_volume(volume_id, instance_id, device) if running?
+			Config.ec2.attach_volume(volume_id, state["instance_id"], device) if running?
 		end
 
 		def connect_ssh
-			system "ssh -i #{Sumo::Config.keypair_file} #{user}@#{hostname}"
+			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
-		def self.attrs
-			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
+#		def self.attrs
+#			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
+#		end
+
+		def ip
+			hostname || config["state_ip"]
 		end
 
-		def refresh
+		def reload
 			@ec2 = nil
-			@volumes = nil
-			reload
+			@config = nil
+			super
 		end
 
 		def to_hash
@@ -281,18 +310,10 @@ module Sumo
 			hash
 		end
 
-		def duplicate(new_name="#{name}-copy")
-			params = { :name => new_name }
-			attributes.each do |key, value|
-				params[key.to_sym] = value if self.class.attrs.include? key.to_sym
-			end
-			self.class.new params
-		end
-
 		def generate_user_data
-			return user_data unless boot_scripts
+			return config["user_data"] unless state["boot_scripts"]
 			s = "#!/bin/sh\n"
-			boot_scripts.split(',').each do |script|
+			state["boot_scripts"].split(',').each do |script|
 				s += "curl -s \"#{Config.temp_script_url(script)}\" | sh\n"
 			end
 			s
@@ -341,7 +362,7 @@ module Sumo
 			host_props = {
 				:hostname => '',
 				:host_type => 'A',
-				:data => elastic_ip,
+				:data => state["elastic_ip"],
 				:zone_id => zone.id
 			}
 			

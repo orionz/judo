@@ -9,126 +9,88 @@ require 'thor'
 class CLI < Thor
 	desc "start [NAMES]", "start one or more servers"
 	def start(*names)
-		Sumo::Server.search(*names).each do |inst|
-			task("Launch server #{inst.name}")   { inst.start }
-			task("Acquire hostname")             { inst.wait_for_hostname }
-			task("Wait for ssh")                 { inst.wait_for_ssh }
-			task("Attaching ip")                 { inst.attach_ip } if inst.elastic_ip
-			task("Attaching volumes")            { inst.attach_volumes } if inst.has_volumes?
+		Sumo::Server.search(*names).each do |server|
+			task("Launch server #{server.name}")   { server.start }
+			task("Acquire hostname")             { server.wait_for_hostname }
+			task("Wait for ssh")                 { server.wait_for_ssh }
+			task("Attaching ip")                 { server.attach_ip } if server.has_ip?
+			task("Attaching volumes")            { server.attach_volumes } if server.has_volumes?
 		end
 	end
 
 	desc "ssh [NAMES]", "ssh to a specified server or first available"
 	def ssh(*names)
-		Sumo::Server.search(*names).each do |inst|
-			inst.refresh
-			if inst.running?
-				inst.wait_for_ssh
-				inst.connect_ssh
+		servers(*names) do |server|
+			server.reload
+			if server.running?
+				server.wait_for_ssh
+				server.connect_ssh
 			else
-				puts "Server #{inst.name} not running"
+				puts "Server #{server.name} not running"
 			end
 		end
 	end
 
-	desc "create NAME --opt1=value1 --opt2=value2", "create a persistent server"
-	Sumo::Server.attrs.each do |a|
-		method_option a, :type => :string, :default => nil, :required => false
-	end
+	desc "create NAME", "create a persistent server"
 	def create(name)
-		inst = Sumo::Server.find_by_name(name)
-		abort("Already a server by that name") unless inst.nil?
-		server = Sumo::Server.get_or_create(options.merge(:name => name))
-		puts "Created server #{name}"
+		abort("Already a server named #{name}") if Sumo::Server.find_by_name(name) ## FIXME - this shold be in model validation
+    Sumo::Server.create :name => name
 	end
 
-	desc "cp NAME NEW_NAME --opt1=value1 --opt2=value2", "copy a persistent server"
-	Sumo::Server.attrs.each do |a|
-		method_option a, :type => :string, :default => nil, :required => false
-	end
-	def cp(name, new_name)
-		inst = Sumo::Server.find_by_name(name)
-		abort("Already a server by that name") unless Sumo::Server.find_by_name(new_name).nil?
-		server = inst.cp(new_name, options)
-		puts "Copied server #{name} as #{new_name}"
+	desc "init [NAMES]", "init ec2 resources for a persistent server"
+	def init(*names)
+		servers(*names) do |server|
+			server.init_resources
+		end
 	end
 
 	desc "restart NAME", "restart a running server"
 	def restart(*names)
-		Sumo::Server.search(*names).each do |inst|
-			task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
-			task("Starting server #{inst.name}") { inst.start }
-			task("Acquire hostname")             { inst.wait_for_hostname }
-			task("Wait for ssh")                 { inst.wait_for_ssh }
-			task("Attaching ip")                 { inst.attach_ip } if inst.elastic_ip
-			task("Attaching volumes")            { inst.attach_volumes } if inst.has_volumes?
+		servers(*names) do |server|
+			server.restart
 		end
 	end
 
 	desc "stop [NAMES]", "stop a persistent server"
 	def stop(*names)
-		Sumo::Server.search(*names).each do |inst|
-			if inst.running?
-				task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
-			else
-				puts "Server #{inst.name} not running"
-			end
+		servers(*names) do |server|
+			server.stop
 		end
 	end
 
-	desc "destroy NAME", "destroy a persistent server"
+	desc "destroy [NAMES]", "destroy a persistent server"
 	def destroy(*names)
-		Sumo::Server.search(*names).each do |inst|
-			task("Stopping server #{inst.name}") { inst.terminate } if inst.running?
-			task("Destroying server #{inst.name}") { inst.destroy }
+		servers(*names) do |server|
+			server.destroy
 		end
 	end
 
-	desc "set [NAMES] --opt1=value1 --opt2=value2", "set config var for an server"
-	Sumo::Server.attrs.each do |a|
-		method_option a, :type => :string, :default => nil, :required => false
-	end
-	def set(*names)
-		Sumo::Server.search(*names).each do |inst|
-			inst.update_attributes!(options)
-		end
-	end
-
-	desc "user_data NAME FILE", "set user data to the content of a file"
-	def user_data(name, file)
-		inst = find_server(name)
-		data = File.read(file)
-		puts data
-		inst.update_attributes!(:user_data => data)
-	end
-		
 	desc "info [NAMES]", "show server config"
 	def info(*names)
-		Sumo::Server.search(*names).each do |server|
+		servers(*names) do |server|
 			puts "#{server.name}:"
-			server.to_hash.each do |key,value|
-				puts "	#{key.to_s}:#{value.to_s.inspect}"
-			end
 			server.volumes.each do |dev,vol_id|
 				info = Sumo::Config.ec2.describe_volumes([vol_id])
-				puts info.inspect
-#				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
+				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
 			end
 		end
 	end
 
-	desc "list [<NAMES>]", "list all servers"
-	def list(*names)
-		names = ["%"] if names.empty? ## search for all by defaul
-		Sumo::Server.search(*names).each do |i|
-			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_size, i.ami, i.hostname || i.elastic_ip, i.ec2_state, "#{i.volumes.keys.size} volumes"
+	desc "list", "list all servers"
+	def list
+		Sumo::Server.all.each do |s|
+			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ip, s.ec2_state, "#{s.volumes.keys.size} volumes"
 		end
 	end
 
-	desc "console [NAME]", "get console output for server or first available"
+	desc "console [NAMES]", "get console output for server or first available"
 	def console(*names)
-		Sumo::Server.search(*names).each do |inst|
-			puts inst.console_output if inst.running?
+		servers(*names) do |server|
+			if server.running?
+				puts "Not running: #{server.name}"
+			else
+				puts server.console_output if server.running?
+			end
 		end
 	end
 
@@ -139,6 +101,7 @@ class CLI < Thor
 		end
 	end
 
+	## // FIXME
 	desc "ips", "list all ips"
 	def ips
 		Sumo::Config.ec2.describe_addresses.each do |ip|
@@ -146,81 +109,16 @@ class CLI < Thor
 		end
 	end
 
-	desc "attach_ip NAME", "attach (and create if not specified) an IP to server"
-	def attach_ip(name)
-		inst = find_server(name)
-		ip = Sumo::Config.ec2.allocate_address
-		inst.add_ip(ip)
-	end
-
-	desc "attach_volume NAME (MEGABYTES | VOLUME) DEVICE", "creates an ec2 volume of the specified size"
-	def attach_volume(name, vs, device)
-		inst = find_running_server(name)
-		vol = vs if vs =~ /^vol/
-		vol ||= task("Create a #{vs}MB volume") { Sumo::Config.ec2.create_volume(nil, vs, inst.availability_zone)[:aws_id] }
-		task("Add Volume to Server") { inst.add_volume(vol, device) }
-	end
-
-	desc "delete_volume VOLUME_ID", "deletes an ec2 volume"
-	def delete_volume(volume)
-		## FIXME - should also remove it from the volumes_json
-		id = task("Deleting volume") { Sumo::Config.ec2.delete_volume(volume) }
-	end
-
-	desc "purge", "PURGE ALL DATA"
-	def purge
-		Sumo::Config.purge
-	end
-
-	desc "detach NAME VOLUME_ID", "detaches volume from server"
-	def detach(name, volume)
-		inst = find_server(name)
-		task("Detaching #{volume}") { Sumo::Config.ec2.detach_volume(volume) }
-	end
-
-	desc "duplicate [NAME] [NEWNAME]", "duplicate named server to newname"
-	def duplicate(name, newname)
-		inst = Sumo::Server.search(name).first
-		task("Duplicating #{inst}") do
-			dupe = inst.duplicate(newname)
-			dupe.save
-		end
-	end
-	
-	desc "upload_script FILENAME", "upload a boot script to S3"
-	def upload_script(filename)
-		task("Uploading #{filename}") do
-			Sumo::Config.upload_script(filename)
-		end
-	end
-
-	desc "list_scripts", "list all boot scripts in S3"
-	def list_scripts()
-		Sumo::Config.list_scripts()
-	end
+#	desc "list_scripts", "list all boot scripts in S3"
+#	def list_scripts()
+#		Sumo::Config.list_scripts()
+#	end
 	
 	no_tasks do
-		def find_idle_server(name)
-			if name
-				Sumo::Server.find_by_name(name) || abort("No such server")
-			else
-				Sumo::Server.find(:all).detect { |i| not i.running? } || abort("No idle servers")
-			end
-		end
-
-		def find_running_server(name)
-			if name
-				Sumo::Server.find_by_name(name) || abort("No such server")
-			else
-				Sumo::Server.find(:all).detect { |i| i.running? } || abort("No running servers")
-			end
-		end
-
-		def find_server(name)
-			if name
-				Sumo::Server.find_by_name(name) || abort("No such servers")
-			else
-				Sumo::Server.find(:all).first || abort("No servers")
+		def servers(*names,&block)
+			names = [ File.basename(File.expand_path(".")) ] if names.empty?
+			Sumo::Server.search(*names).each do |server|
+				block.call(server)
 			end
 		end
 
@@ -237,7 +135,7 @@ class CLI < Thor
 
 		def instance_id_to_sumo(instance_id)
 			result = "" if instance_id.nil?
-			result ||= Sumo::Server.all.detect { |i| i.instance_id == instance_id }
+			result ||= Sumo::Server.all.detect { |s| s.instance_id == instance_id }
 			result ||= instance_id
 		end
 	end
