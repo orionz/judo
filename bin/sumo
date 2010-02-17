@@ -42,6 +42,17 @@ class CLI < Thor
 		puts "Created server #{name}"
 	end
 
+	desc "cp NAME NEW_NAME --opt1=value1 --opt2=value2", "copy a persistent server"
+	Sumo::Server.attrs.each do |a|
+		method_option a, :type => :string, :default => nil, :required => false
+	end
+	def cp(name, new_name)
+		inst = Sumo::Server.find_by_name(name)
+		abort("Already a server by that name") unless Sumo::Server.find_by_name(new_name).nil?
+		server = inst.cp(new_name, options)
+		puts "Copied server #{name} as #{new_name}"
+	end
+
 	desc "restart NAME", "restart a running server"
 	def restart(*names)
 		Sumo::Server.search(*names).each do |inst|
@@ -98,6 +109,11 @@ class CLI < Thor
 			server.to_hash.each do |key,value|
 				puts "	#{key.to_s}:#{value.to_s.inspect}"
 			end
+			server.volumes.each do |dev,vol_id|
+				info = Sumo::Config.ec2.describe_volumes([vol_id])
+				puts info.inspect
+#				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
+			end
 		end
 	end
 
@@ -105,7 +121,7 @@ class CLI < Thor
 	def list(*names)
 		names = ["%"] if names.empty? ## search for all by defaul
 		Sumo::Server.search(*names).each do |i|
-			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_size, i.ami, i.elastic_ip || i.hostname, i.ec2_state, i.volumes_json
+			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", i.name, i.instance_id, i.instance_size, i.ami, i.hostname || i.elastic_ip, i.ec2_state, "#{i.volumes.keys.size} volumes"
 		end
 	end
 

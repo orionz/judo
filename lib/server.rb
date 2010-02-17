@@ -6,7 +6,9 @@ module Sumo
 
 		def self.search(*names)
 			query = names.map { |name| name =~ /(^%)|(%$)/ ? "name like ?" : "name = ?" }.join(" or ")
-			self.select(:all, :conditions => names.unshift(query))
+			results = self.select(:all, :conditions => names.unshift(query))
+			raise "No such server" if results.empty?
+			results
 		end
 		
 		def self.get_or_create(options)
@@ -24,11 +26,38 @@ module Sumo
 			
 			return server
 		end
+
+		def to_options
+			options = {}
+			Sumo::Server.attrs.each do |attr|
+				options[attr.to_s] = self[attr]
+			end
+			options
+		end
+
+		def cp(new_name, options = {})
+			puts self.to_options.merge(options).merge(:name => new_name).inspect
+			volumes.each do |dev,vol_id|
+			end
+			new_server = Sumo::Server.new self.to_options.merge(options).merge(:name => new_name)
+			new_server.save
+			Sumo::Config.ec2.describe_volumes(volumes.values).each do |aws_vol|
+				dev = volumes.invert[aws_vol[:aws_id]]
+				size = aws_vol[:aws_size]
+				volume_id = Sumo::Config.ec2.create_volume(nil, size, new_server.availability_zone)[:aws_id]
+				puts "creating volume #{volume_id} #{dev} #{size}"
+				new_server.add_volume(volume_id, dev)
+			end unless volumes.empty?
+			if has_ip?
+				new_server.add_ip(Sumo::Config.ec2.allocate_address)
+				puts "allocate ip address #{new_server.elastic_ip}"
+			end
+		end
 		
 		def method_missing(method, *args)
 			if all_attrs.include?(method)
-				if self[method]
-					self[method].first
+				if @attributes[method.to_s]
+					@attributes[method.to_s].first
 				else
 					nil
 				end
@@ -44,8 +73,16 @@ module Sumo
 			save
 		end
 
+		def fix
+			(JSON.load(volumes_json) rescue {}).each do |device,volume_id|
+				reload
+				@attributes["volumes_flat"] = "#{device}:#{volume_id}"
+				put
+			end
+		end
+
 		def all_attrs
-			[:name, :ami32, :ami64, :instance_size, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_json, :elastic_ip, :user_data, :boot_scripts]
+			[:name, :ami32, :ami64, :instance_size, :instance_id, :state, :availability_zone, :key_name, :security_group, :user, :volumes_flat, :volumes_json, :elastic_ip, :user_data, :boot_scripts]
 		end
 
 		def initialize(attrs={})
@@ -66,7 +103,7 @@ module Sumo
 
 		def self.untracked
 			ids = all.map { |a| a.instance_id }
-			@@ec2_list.reject { |e| e[:aws_state] == "terminated" or ids.include?(e[:aws_instance_id]) } 
+			@@ec2_list.reject { |e| e[:aws_state] == "terminated" or ids.include?(e[:aws_instance_id]) }
 		end
 
 		def has_ip?
@@ -78,19 +115,18 @@ module Sumo
 		end
 
 		def volumes
-			## FIXME - just use the darn simpledb array - use put/delete do avoid race conditions
-			@volumes ||= JSON.load(volumes_json) rescue {}
+			Hash[ (@attributes["volumes_flat"] || []).map { |a| a.split(":") } ]
 		end
 
 		def destroy
 			delete
-			volumes.each { |mount,v| Sumo::Config.ec2.delete_volume(v) }
+			volumes.each { |dev,v| Sumo::Config.ec2.delete_volume(v) }
 			Sumo::Config.ec2.release_address(elastic_ip) if has_ip?
 		end
 
-		def before_save
-			self["volumes_json"] = volumes.to_json
-		end
+#		def before_save
+#			self["volumes_json"] = volumes.to_json
+#		end
 
 		def ec2_state
 			ec2_instance[:aws_state] rescue "offline"
@@ -108,8 +144,8 @@ module Sumo
 		def start
 			Config.validate ## FIXME
 
-			result = Config.ec2.launch_instances(ami, 
-				:instance_type => instance_size, 
+			result = Config.ec2.launch_instances(ami,
+				:instance_type => instance_size,
 				:availability_zone => availability_zone,
 				:key_name => key_name,
 				:group_ids => [security_group],
@@ -217,12 +253,13 @@ module Sumo
 		def add_volume(volume_id, device)
 			abort("Server already has a volume on that device") if volumes[device]
 			## TODO make sure its not attached to someone else
-			volumes[device] = volume_id
-			self[:volumes_json] = volumes.to_json
-			save
+			## delete_values( :volumes_flat => "#{device}:#{volume_id}" ) ## to remove
+			reload
+			@attributes["volumes_flat"] = "#{device}:#{volume_id}"
+			put
 			Config.ec2.attach_volume(volume_id, instance_id, device) if running?
 		end
- 
+
 		def connect_ssh
 			system "ssh -i #{Sumo::Config.keypair_file} #{user}@#{hostname}"
 		end
@@ -301,7 +338,7 @@ module Sumo
 				end
 			end
 			
-			host_props = { 
+			host_props = {
 				:hostname => '',
 				:host_type => 'A',
 				:data => elastic_ip,
