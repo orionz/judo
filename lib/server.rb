@@ -2,8 +2,6 @@ module Sumo
 	class Server < Aws::ActiveSdb::Base
 		set_domain_name :sumo_server
 
-		@@ec2_list = Config.ec2.describe_instances
-
 		def self.search(*names)
 			query = names.map { |name| name =~ /(^%)|(%$)/ ? "name like ?" : "name = ?" }.join(" or ")
 			results = self.select(:all, :conditions => [ query, *names ])
@@ -27,6 +25,10 @@ module Sumo
 
 		def state
 			stringify_keys_and_vals(@attributes)
+		end
+
+		def to_s
+			name
 		end
 
 		def stringify_keys_and_vals(hash)
@@ -144,6 +146,7 @@ module Sumo
 		end
 
 		def ec2_instance
+			@@ec2_list ||= Config.ec2.describe_instances
 			@@ec2_list.detect { |e| e[:aws_instance_id] == state["instance_id"] } or {}
 		end
 
@@ -153,7 +156,7 @@ module Sumo
 		end
 
 		def start
-			abort("Already running") if running?
+			abort "Already running" if running?
 			task("Starting server #{name}")      { launch_ec2 }
 			task("Acquire hostname")             { wait_for_hostname }
 			task("Wait for ssh")                 { wait_for_ssh }
@@ -162,19 +165,16 @@ module Sumo
 		end
 
 		def restart
-			stop
+			stop if running?
 			start
 		end
 
 		def stop
-			if running?
-				instance_id = state["instance_id"]
-				task("Terminating instance") { Config.ec2.terminate_instances([ instance_id ]) } 
-				update_attributes! :instance_id => nil
-				task("Wait for volumes to detach") { wait_for_termination(instance_id) } if volumes.size > 0	
-			else
-				puts "Server #{name} not running"
-			end
+			abort "not running" unless running?
+			task("Terminating instance") { Config.ec2.terminate_instances([ state["instance_id"] ]) } 
+			task("Wait for volumes to detach") { wait_for_termination if volumes.size > 0	}
+			update_attributes! :instance_id => nil
+			reload
 		end
 
 		def launch_ec2
@@ -218,15 +218,17 @@ module Sumo
 			end
 		end
 
-		def wait_for_termination(instance_id)
+		def wait_for_termination
 			loop do
-				ec2 = Config.ec2.describe_instances.detect { |i| i[:aws_instance_id] == instance_id }
-				break if ec2[:aws_state] == "terminated"
+				reload
+				puts "ec2 #{ec2_instance.id} #{ec2_instance.inspect}"
+				break if ec2_instance[:aws_state] == "terminated"
 				sleep 1
 			end
 		end
 
 		def wait_for_ssh
+      abort "not running" unless running?
 			loop do
 				begin
 					Timeout::timeout(4) do
@@ -238,6 +240,7 @@ module Sumo
 			end
 		end
 
+		## FIXME -- need to figure out what to do with keypair.pem ...
 		def ssh(cmds)
 			IO.popen("ssh -i #{Config.keypair_file} #{user}@#{hostname} > ~/.sumo/ssh.log 2>&1", "w") do |pipe|
 				pipe.puts cmds.join(' && ')
@@ -287,6 +290,7 @@ module Sumo
 		end
 
 		def connect_ssh
+      abort "not running" unless running?
 			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
@@ -299,7 +303,8 @@ module Sumo
 		end
 
 		def reload
-			@config = nil
+			@@ec2_list = nil
+#			@config = nil
 			super
 		end
 

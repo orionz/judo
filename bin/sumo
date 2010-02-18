@@ -10,11 +10,7 @@ class CLI < Thor
 	desc "start [NAMES]", "start one or more servers"
 	def start(*names)
 		servers(*names) do |server|
-			if server.running?
-				puts "Server #{server.name} is already running"
-			else
-				server.start
-			end
+			server.start
 		end
 	end
 
@@ -22,12 +18,8 @@ class CLI < Thor
 	def ssh(*names)
 		servers(*names) do |server|
 			server.reload
-			if server.running?
-				server.wait_for_ssh
-				server.connect_ssh
-			else
-				puts "Server #{server.name} not running"
-			end
+			server.wait_for_ssh
+			server.connect_ssh
 		end
 	end
 
@@ -96,29 +88,31 @@ class CLI < Thor
 
 	desc "volumes", "list all volumes"
 	def volumes
+		printf "%13s %6s %12s  %-10s %-16s %-16s\n", "AWS_ID", "SIZE", "AWS_STATUS", "AWS_DEVICE", "ATTACHED TO", "CONFIGURED FOR"
+		printf "%s\n", ("-" * 80)
 		Sumo::Config.ec2.describe_volumes.each do |volume|
-			printf "%-10s %-10s %-10s %-10s %-10s\n", volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device], instance_id_to_sumo(volume[:aws_instance_id])
+			printf "%13s %6s %12s  %-10s %-16s %-16s\n", volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device], instance_id_to_sumo(volume[:aws_instance_id]) || volume[:aws_instance_id], volume_id_to_sumo(volume[:aws_id])
 		end
 	end
 
-	## // FIXME
 	desc "ips", "list all ips"
 	def ips
+		printf "%15s %20s %20s\n", "IP", "ATTACHED TO", "CONFIGURED FOR"
+		printf "%s\n", ("-"*57)
 		Sumo::Config.ec2.describe_addresses.each do |ip|
-			printf "%-10s %-10s\n", ip[:public_ip], instance_id_to_sumo(ip[:instance_id])
+			printf "%15s %20s %20s\n", ip[:public_ip], instance_id_to_sumo(ip[:instance_id]) || ip[:instance_id], ip_to_sumo(ip[:public_ip])
 		end
 	end
 
-#	desc "list_scripts", "list all boot scripts in S3"
-#	def list_scripts()
-#		Sumo::Config.list_scripts()
-#	end
-	
 	no_tasks do
 		def servers(*names,&block)
 			names = [ File.basename(File.expand_path(".")) ] if names.empty?
 			Sumo::Server.search(*names).each do |server|
-				block.call(server)
+				begin
+					block.call(server)
+				rescue Object => e
+					puts "Error on #{server.name}: #{e.message}"
+				end
 			end
 		end
 
@@ -133,10 +127,16 @@ class CLI < Thor
 			result
 		end
 
+		def volume_id_to_sumo(volume)
+      Sumo::Server.select(:first, :conditions => [ "volumes_flat like ?", "%#{volume}" ]) rescue nil
+		end
+
+		def ip_to_sumo(ip)
+			Sumo::Server.find_by_elastic_ip(ip) rescue nil
+		end
+
 		def instance_id_to_sumo(instance_id)
-			result = "" if instance_id.nil?
-			result ||= Sumo::Server.all.detect { |s| s.instance_id == instance_id }
-			result ||= instance_id
+			Sumo::Server.all.detect { |s| s.state["instance_id"] and s.state["instance_id"] == instance_id } rescue nil
 		end
 	end
 end

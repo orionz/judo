@@ -2,6 +2,7 @@ module Sumo
 	module Config
 		extend self
 
+		## FIXME - maybe write these to defaults.json and dont have them hidden here in the code...
 		def server_defaults
 			{
 				:key_name => key_name,
