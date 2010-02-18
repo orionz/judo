@@ -153,7 +153,8 @@ module Sumo
 		end
 
 		def start
-			task("Starting server #{name}")      { start }
+			abort("Already running") if running?
+			task("Starting server #{name}")      { launch_ec2 }
 			task("Acquire hostname")             { wait_for_hostname }
 			task("Wait for ssh")                 { wait_for_ssh }
 			task("Attaching ip")                 { attach_ip } if state["elastic_ip"]
@@ -176,7 +177,7 @@ module Sumo
 			end
 		end
 
-		def start
+		def launch_ec2
 			Config.validate ## FIXME
 
 			result = Config.ec2.launch_instances(ami,

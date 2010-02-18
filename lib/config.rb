@@ -10,8 +10,7 @@ module Sumo
 				:ami64 => ami64,
 				:user => user,
 				:security_group => security_group,
-				:availability_zone => availability_zone,  ## FIXME
-				:state => "offline" ## FIXME
+				:availability_zone => availability_zone  ## FIXME
 			}
 		end
 

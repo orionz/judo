@@ -9,12 +9,12 @@ require 'thor'
 class CLI < Thor
 	desc "start [NAMES]", "start one or more servers"
 	def start(*names)
-		Sumo::Server.search(*names).each do |server|
-			task("Launch server #{server.name}")   { server.start }
-			task("Acquire hostname")             { server.wait_for_hostname }
-			task("Wait for ssh")                 { server.wait_for_ssh }
-			task("Attaching ip")                 { server.attach_ip } if server.has_ip?
-			task("Attaching volumes")            { server.attach_volumes } if server.has_volumes?
+		servers(*names) do |server|
+			if server.running?
+				puts "Server #{server.name} is already running"
+			else
+				server.start
+			end
 		end
 	end
 
