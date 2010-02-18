@@ -144,7 +144,7 @@ module Sumo
 		end
 
 		def ec2_instance
-			@ec2 ||= Config.ec2.describe_instances([state["instance_id"]]).first rescue {}
+			@@ec2_list.detect { |e| e[:aws_instance_id] == state["instance_id"] } or {}
 		end
 
 		def running?
@@ -299,7 +299,6 @@ module Sumo
 		end
 
 		def reload
-			@ec2 = nil
 			@config = nil
 			super
 		end
