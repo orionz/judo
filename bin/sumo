@@ -127,15 +127,15 @@ class CLI < Thor
 		end
 
 		def volume_id_to_sumo(volume)
-			Sumo::Server.select(:first, :conditions => [ "volumes_flat like ?", "%#{volume}" ]) rescue nil
+			Sumo::Server.all.detect { |s| s.volumes.invert[volume] }
 		end
 
 		def ip_to_sumo(ip)
-			Sumo::Server.find_by_elastic_ip(ip) rescue nil
+			Sumo::Server.all.detect { |s| s.state["elastic_ip"] == ip }
 		end
 
 		def instance_id_to_sumo(instance_id)
-			Sumo::Server.all.detect { |s| s.state["instance_id"] and s.state["instance_id"] == instance_id } rescue nil
+			Sumo::Server.all.detect { |s| s.state["instance_id"] and s.state["instance_id"] == instance_id }
 		end
 	end
 end
