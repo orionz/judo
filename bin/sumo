@@ -26,7 +26,7 @@ class CLI < Thor
 	desc "create NAME", "create a persistent server"
 	def create(name)
 		abort("Already a server named #{name}") if Sumo::Server.find_by_name(name) ## FIXME - this shold be in model validation
-    Sumo::Server.create :name => name
+		Sumo::Server.create :name => name
 	end
 
 	desc "init [NAMES]", "init ec2 resources for a persistent server"
@@ -60,7 +60,6 @@ class CLI < Thor
 	desc "info [NAMES]", "show server config"
 	def info(*names)
 		servers(*names) do |server|
-			puts "#{server.name}:"
 			server.volumes.each do |dev,vol_id|
 				info = Sumo::Config.ec2.describe_volumes([vol_id])
 				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
@@ -128,7 +127,7 @@ class CLI < Thor
 		end
 
 		def volume_id_to_sumo(volume)
-      Sumo::Server.select(:first, :conditions => [ "volumes_flat like ?", "%#{volume}" ]) rescue nil
+			Sumo::Server.select(:first, :conditions => [ "volumes_flat like ?", "%#{volume}" ]) rescue nil
 		end
 
 		def ip_to_sumo(ip)

@@ -228,7 +228,7 @@ module Sumo
 		end
 
 		def wait_for_ssh
-      abort "not running" unless running?
+			abort "not running" unless running?
 			loop do
 				begin
 					Timeout::timeout(4) do
@@ -290,7 +290,7 @@ module Sumo
 		end
 
 		def connect_ssh
-      abort "not running" unless running?
+			abort "not running" unless running?
 			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
