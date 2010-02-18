@@ -89,8 +89,10 @@ class CLI < Thor
 	def volumes
 		printf "%13s %6s %12s  %-10s %-16s %-16s\n", "AWS_ID", "SIZE", "AWS_STATUS", "AWS_DEVICE", "ATTACHED TO", "CONFIGURED FOR"
 		printf "%s\n", ("-" * 80)
-		Sumo::Config.ec2.describe_volumes.each do |volume|
-			printf "%13s %6s %12s  %-10s %-16s %-16s\n", volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device], instance_id_to_sumo(volume[:aws_instance_id]) || volume[:aws_instance_id], volume_id_to_sumo(volume[:aws_id])
+		Sumo::Config.ec2.describe_volumes.map do |volume|
+			[ volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device], instance_id_to_sumo(volume[:aws_instance_id]) || volume[:aws_instance_id], volume_id_to_sumo(volume[:aws_id]) ]
+		end.sort { |a,b| [ a[5].to_s, a[3] || ''] <=> [ b[5].to_s, b[3] || ''] }.each do |d|
+			printf "%13s %6s %12s  %-10s %-16s %-16s\n", *d
 		end
 	end
 
@@ -98,8 +100,10 @@ class CLI < Thor
 	def ips
 		printf "%15s %20s %20s\n", "IP", "ATTACHED TO", "CONFIGURED FOR"
 		printf "%s\n", ("-"*57)
-		Sumo::Config.ec2.describe_addresses.each do |ip|
-			printf "%15s %20s %20s\n", ip[:public_ip], instance_id_to_sumo(ip[:instance_id]) || ip[:instance_id], ip_to_sumo(ip[:public_ip])
+		Sumo::Config.ec2.describe_addresses.map do |ip|
+			[ ip[:public_ip], instance_id_to_sumo(ip[:instance_id]) || ip[:instance_id], ip_to_sumo(ip[:public_ip]) ]
+		end.sort { |a,b| a[2].to_s <=> b[2].to_s }.each do |d|
+			printf "%15s %20s %20s\n", *d
 		end
 	end
 
