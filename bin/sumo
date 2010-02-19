@@ -70,7 +70,7 @@ class CLI < Thor
 	desc "list", "list all servers"
 	def list
 		Sumo::Server.all.each do |s|
-			printf "%-14s %-11s %-10s %-13s %-15s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ip, s.ec2_state, "#{s.volumes.keys.size} volumes"
+			printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
 		end
 	end
 

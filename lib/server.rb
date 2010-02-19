@@ -219,6 +219,7 @@ module Sumo
 		end
 
 		def wait_for_termination
+			## FIXME -- make SURE that the volumes are attached to the correct box - otherwise we will wait for ever - need a good error message...
 			loop do
 				reload
 				puts "ec2 #{ec2_instance.id} #{ec2_instance.inspect}"
