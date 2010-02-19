@@ -91,6 +91,14 @@ module Sumo
 			@ec2 ||= Aws::Ec2.new(access_id, access_secret, :logger => Logger.new(nil))
 		end
 
+		def couchdb
+			@couchdb ||= CouchRest.database!(couch_url)
+		end
+
+		def couch_url
+			config["couch_url"] || "http://127.0.0.1:5984/sumo"
+		end
+
 		def key_name
 			config["key_name"] || "sumo"
 		end

@@ -70,7 +70,7 @@ module Sumo
 				if config["elastic_ip"] and not state["elastic_ip"]
 					task("Adding an elastic ip") { add_ip(Sumo::Config.ec2.allocate_address) }
 				else
-					puts "Elastic ip #{settings["elastic_ip"]} already exists."
+					puts "Elastic ip #{config["elastic_ip"]} already exists."
 				end
 			rescue Aws::AwsError => e
 				if e.message =~ /AddressLimitExceeded/
@@ -294,6 +294,22 @@ module Sumo
 			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
+		def commit
+			doc = Config.couchdb.get(name) rescue {}
+			config['_id'] = name
+			config['_rev'] = doc['_rev'] if doc.has_key?('_rev')
+			response = Config.couchdb.save_doc(config)
+			doc = Config.couchdb.get(response['id'])
+
+			# walk subdirs and save as _attachments
+			subdirs = ['templates', 'packages']
+			box = Rush::Box.new('localhost')
+			basedir = File.expand_path(".")
+			subdirs.each { |subdir|
+				box["#{basedir}/#{subdir}/"]['*'].each { |f| doc.put_attachment("#{subdir}/#{f.name}", f.contents) }
+			}
+		end
+
 #		def self.attrs
 #			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
 #		end

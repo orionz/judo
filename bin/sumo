@@ -109,6 +109,13 @@ class CLI < Thor
 		end
 	end
 
+	desc "commit [NAMES]", "push config and files to couchdb"
+	def commit(*names)
+	  servers(*names) do |server|
+	    server.commit
+		end
+  end
+
 	no_tasks do
 		def servers(*names,&block)
 			names = [ File.basename(File.expand_path(".")) ] if names.empty?
