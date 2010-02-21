@@ -23,17 +23,18 @@ class CLI < Thor
 		end
 	end
 
-	desc "create NAME", "create a persistent server"
-	def create(name)
-		abort("Already a server named #{name}") if Sumo::Server.find_by_name(name) ## FIXME - this shold be in model validation
-		Sumo::Server.create :name => name
+	desc "create [NAME]", "create a persistent server"
+	def create(name = nil)
+		name = File.basename(Dir.pwd) if File.exists?("./config.json")
+		server = Sumo::Server.create :name => name, :virgin => true, :secret => rand(2 ** 128).to_s(36)
+    server.allocate_resources if Sumo::Config.server_dir(name)
 	end
 
-	desc "init [NAMES]", "init ec2 resources for a persistent server"
-	def init(*names)
-		servers(*names) do |server|
-			server.init_resources
-		end
+	desc "init", "inits the current folder as a sumo repository"
+	def init
+#		servers(*names) do |server|
+#			server.init_resources
+#		end
 	end
 
 	desc "restart NAME", "restart a running server"
@@ -60,17 +61,18 @@ class CLI < Thor
 	desc "info [NAMES]", "show server config"
 	def info(*names)
 		servers(*names) do |server|
-			server.volumes.each do |dev,vol_id|
-				info = Sumo::Config.ec2.describe_volumes([vol_id])
-				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
-			end
+#			server.volumes.each do |dev,vol_id|
+			puts server.state.inspect
+				## EC2 describe_volumes
+#				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
+#			end
 		end
 	end
 
 	desc "list", "list all servers"
 	def list
 		Sumo::Server.all.each do |s|
-			printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+			printf "%-18s %-11s %-11s %-13s %-10s %-10s %-12s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.config?, s.ip
 		end
 	end
 
@@ -90,9 +92,10 @@ class CLI < Thor
 		format = "%13s %6s %12s  %-10s %-16s %-16s\n"
 		printf format, "AWS_ID", "SIZE", "AWS_STATUS", "AWS_DEVICE", "ATTACHED TO", "CONFIGURED FOR"
 		printf "%s\n", ("-" * 80)
+		### EC2 describe_volumes
 		Sumo::Config.ec2.describe_volumes.map do |volume|
-			[ volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device], instance_id_to_sumo(volume[:aws_instance_id]) || volume[:aws_instance_id], volume_id_to_sumo(volume[:aws_id]) ]
-		end.sort { |a,b| [ a[5].to_s, a[3] || ''] <=> [ b[5].to_s, b[3] || ''] }.each do |d|
+			[ volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device] || "", instance_id_to_sumo(volume[:aws_instance_id]) || volume[:aws_instance_id] || "", volume_id_to_sumo(volume[:aws_id]) ]
+		end.sort { |a,b| [ a[5].to_s, a[3].to_s ] <=> [ b[5].to_s, b[3].to_s ] }.each do |d|
 			printf format, *d
 		end
 	end
@@ -102,6 +105,7 @@ class CLI < Thor
 		format = "%15s %20s %20s\n"
 		printf format, "IP", "ATTACHED TO", "CONFIGURED FOR"
 		printf "%s\n", ("-"*57)
+		## EC2 describe_addresses
 		Sumo::Config.ec2.describe_addresses.map do |ip|
 			[ ip[:public_ip], instance_id_to_sumo(ip[:instance_id]) || ip[:instance_id], ip_to_sumo(ip[:public_ip]) ]
 		end.sort { |a,b| a[2].to_s <=> b[2].to_s }.each do |d|
@@ -109,11 +113,9 @@ class CLI < Thor
 		end
 	end
 
-	desc "commit [NAMES]", "push config and files to couchdb"
-	def commit(*names)
-	  servers(*names) do |server|
-	    server.commit
-		end
+	desc "commit", "push configs and files to couchdb"
+	def commit
+    Sumo::Server.commit
   end
 
 	no_tasks do

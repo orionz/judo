@@ -10,5 +10,4 @@ require 'rush'
 
 require File.dirname(__FILE__) + '/config'
 require File.dirname(__FILE__) + '/server'
-require File.dirname(__FILE__) + '/zerigo_dns'
 require File.dirname(__FILE__) + '/couchrest_hacks'

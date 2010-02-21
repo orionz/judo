@@ -1,3 +1,8 @@
+## TODO
+
+## handle init functionality
+## implement server pools
+
 module Sumo
 	class Server < Aws::ActiveSdb::Base
 		set_domain_name :sumo_server
@@ -19,8 +24,7 @@ module Sumo
 		end
 
 		def config
-			# old_config = [:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
-			@config ||= Sumo::Config.merged_local_config(name)
+			@config ||= Sumo::Config.merged_config(name)
 		end
 
 		def state
@@ -38,36 +42,30 @@ module Sumo
 			end
 		end
 
-		## FIXME - how do I handle deleting ip/drives
-		def needs_init
-			return true if config["elastic_ip"] and not state["elastic_ip"]
+		def allocate_resources
 			if config["volumes"]
 				config["volumes"].each do |volume_config|
 					device = volume_config["device"]
-					return true if not volumes["device"]
-				end
-			end
-			false
-		end
-
-		def init_resources
-			if config["volumes"]
-				config["volumes"].each do |volume_config|
-					device = volume_config["device"]
-					size = volume_config["size"]
-					if not volumes[device]
-						task("Creating EC2 Volume #{device} #{size}") do
-							volume_id = Sumo::Config.ec2.create_volume(nil, size, config["availability_zone"])[:aws_id]
-							add_volume(volume_id, device)
+					if volume_config["media"] == "ebs"
+						size = volume_config["size"]
+						if not volumes[device]
+							task("Creating EC2 Volume #{device} #{size}") do
+								### EC2 create_volume
+								volume_id = Sumo::Config.ec2.create_volume(nil, size, config["availability_zone"])[:aws_id]
+								add_volume(volume_id, device)
+							end
+						else
+							puts "Volume #{device} already exists."
 						end
 					else
-						puts "Volume #{device} already exists."
+						puts "device #{device} is not of media type 'ebs', skipping..."
 					end
 				end
 			end
 
 			begin
 				if config["elastic_ip"] and not state["elastic_ip"]
+					### EC2 allocate_address
 					task("Adding an elastic ip") { add_ip(Sumo::Config.ec2.allocate_address) }
 				else
 					puts "Elastic ip #{config["elastic_ip"]} already exists."
@@ -81,7 +79,12 @@ module Sumo
 			end
 		end
 
+		### FIXME - also I should use a logger service for this rather than printf...
 		def task(msg, &block)
+			self.class.task(msg, &block)
+		end
+
+		def self.task(msg, &block)
 			printf "---> %-24s ", "#{msg}..."
 			STDOUT.flush
 			start = Time.now
@@ -93,18 +96,6 @@ module Sumo
 			result
 		end
 
-#		def method_missing(method, *args)
-#			if all_attrs.include?(method)
-#				if @attributes[method.to_s]
-#					@attributes[method.to_s].first
-#				else
-#					nil
-#				end
-#			else
-#				super(method, @args)
-#			end
-#		end
-
 		def update_attributes!(args)
 			args.each do |key,value|
 				self[key] = value
@@ -112,13 +103,27 @@ module Sumo
 			save
 		end
 
-		def before_create ## FIXME make this work -- also check for validate functions in the api
- #	 	abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
-			task("Creating server #{attrs[:name]}") { super(attrs) }
+		def self.create(attrs) ## FIXME make this work -- also check for validate functions in the api
+		 	abort("Server needs a name") if attrs[:name].nil?
+		 	abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
+			task("Creating server #{attrs[:name]}") { }
+			super(attrs)
+		end
+
+		def dir
+			Sumo::Config.server_dir(name)
+		end
+
+		def config?
+			dir ? "has config" : "no config"
 		end
 
 		def self.all
 			@@all ||= Server.find(:all)
+		end
+
+		def self.untracked
+			Sumo::Config.server_dirs
 		end
 
 		def has_ip?
@@ -133,11 +138,17 @@ module Sumo
 			Hash[ (@attributes["volumes_flat"] || []).map { |a| a.split(":") } ]
 		end
 
+		def remove_ip
+			Sumo::Config.ec2.release_address(state["elastic_ip"])
+			update_attributes! :elastic_ip => nil
+		end
+
 		def destroy
 			stop if running?
-			task("Deleting Elastic Ip") { Sumo::Config.ec2.release_address(state["elastic_ip"]) } if has_ip?
+			### EC2 release_address
+			task("Deleting Elastic Ip") { remove_ip } if has_ip?
 			volumes.each { |dev,v| remove_volume(v,dev) }
-			task("Destroying server #{name}") { super }
+			task("Destroying server #{name}") { delete }
 			## FIXME - should we delete the server folder and config on disk?
 		end
 
@@ -146,6 +157,7 @@ module Sumo
 		end
 
 		def ec2_instance
+			### EC2 describe_instances
 			@@ec2_list ||= Config.ec2.describe_instances
 			@@ec2_list.detect { |e| e[:aws_instance_id] == state["instance_id"] } or {}
 		end
@@ -171,26 +183,31 @@ module Sumo
 
 		def stop
 			abort "not running" unless running?
-			task("Terminating instance") { Config.ec2.terminate_instances([ state["instance_id"] ]) } 
-			task("Wait for volumes to detach") { wait_for_termination if volumes.size > 0	}
+			## EC2 terminate_isntaces
+			task("Terminating instance") { Config.ec2.terminate_instances([ state["instance_id"] ]) }
+			## FIXME -- really I want to wait for the volumes to be in state detached
+			task("Wait for volumes to detach") { wait_for_termination } if volumes.size > 0
 			update_attributes! :instance_id => nil
 			reload
 		end
 
 		def launch_ec2
-			Config.validate ## FIXME
+			validate
 
+			## EC2 launch_instances
 			result = Config.ec2.launch_instances(ami,
 				:instance_type => config["instance_size"],
 				:availability_zone => config["availability_zone"], ### FIXME
 				:key_name => config["key_name"],
 				:group_ids => [config["security_group"]],
-				:user_data => generate_user_data).first
+				:user_data => user_data).first
 
-			update_attributes! :instance_id => result[:aws_instance_id]
+			## can find : :aws_availability_zone
+			update_attributes! :instance_id => result[:aws_instance_id], :virgin => nil
 		end
 
 		def console_output
+			### EC2 get_console_output
 			Config.ec2.get_console_output(state["instance_id"])[:aws_output]
 		end
 
@@ -222,7 +239,6 @@ module Sumo
 			## FIXME -- make SURE that the volumes are attached to the correct box - otherwise we will wait for ever - need a good error message...
 			loop do
 				reload
-				puts "ec2 #{ec2_instance.id} #{ec2_instance.inspect}"
 				break if ec2_instance[:aws_state] == "terminated"
 				sleep 1
 			end
@@ -259,6 +275,7 @@ module Sumo
 
 		def attach_ip
 			return unless running? and state["elastic_ip"]
+			### EC2 associate_address
 			Config.ec2.associate_address(state["instance_id"], state["elastic_ip"])
 			reload
 		end
@@ -271,12 +288,14 @@ module Sumo
 		def attach_volumes
 			return unless running?
 			volumes.each do |device,volume_id|
+				### EC2 attach_volume
 				Config.ec2.attach_volume(volume_id, state["instance_id"], device)
 			end
 		end
 
 		def remove_volume(volume_id, device)
 			task("Deleting #{device} #{volume_id}") do
+				### EC2 delete_volume
 				Sumo::Config.ec2.delete_volume(volume_id)
 				delete_values( :volumes_flat => "#{device}:#{volume_id}" )
 			end
@@ -284,10 +303,13 @@ module Sumo
 
 		def add_volume(volume_id, device)
 			abort("Server already has a volume on that device") if volumes[device]
-			reload
+			reload  ## important to try and minimize race conditions with other potential clients
 			@attributes["volumes_flat"] = "#{device}:#{volume_id}"
 			put
+			reload ## important so we don't overwrite volumes_flat later
+			### EC2 attach_volume
 			Config.ec2.attach_volume(volume_id, state["instance_id"], device) if running?
+			volume_id
 		end
 
 		def connect_ssh
@@ -295,25 +317,28 @@ module Sumo
 			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
-		def commit
-			doc = Config.couchdb.get(name) rescue {}
-			config['_id'] = name
-			config['_rev'] = doc['_rev'] if doc.has_key?('_rev')
-			response = Config.couchdb.save_doc(config)
-			doc = Config.couchdb.get(response['id'])
+		## FIXME - 3 types of servers - config and not state, state and no config, state and config...
 
-			# walk subdirs and save as _attachments
-			subdirs = ['templates', 'packages']
-			box = Rush::Box.new('localhost')
-			basedir = File.expand_path(".")
-			subdirs.each { |subdir|
-				box["#{basedir}/#{subdir}/"]['*'].each { |f| doc.put_attachment("#{subdir}/#{f.name}", f.contents) }
-			}
+		def self.commit
+			Config.server_dirs.each do |config_dir|
+				name = File.basename(config_dir)
+				puts "commiting #{name}"
+				doc = Config.couchdb.get(name) rescue {}
+				config = Config.read_config(name)
+				config['_id'] = name
+				config['_rev'] = doc['_rev'] if doc.has_key?('_rev')
+				response = Config.couchdb.save_doc(config)
+				doc = Config.couchdb.get(response['id'])
+
+				# walk subdirs and save as _attachments
+				['templates', 'packages', 'scripts'].each { |subdir|
+					Dir["#{config_dir}/#{subdir}/*"].each do |f|
+						puts "storing attachment #{f}"
+						doc.put_attachment("#{subdir}/#{File.basename(f)}", File.read(f))
+					end
+				}
+			end
 		end
-
-#		def self.attrs
-#			[:ami32, :ami64, :instance_size, :availability_zone, :key_name, :security_group, :user, :user_data, :boot_scripts]
-#		end
 
 		def ip
 			hostname || config["state_ip"]
@@ -325,80 +350,47 @@ module Sumo
 			super
 		end
 
-		def to_hash
-			hash = {}
-			Server.attrs.each { |key| hash[key] = self.send(key) }
-			hash[:user_data] = generate_user_data
-			hash
+		def dir
+			Config.server_dirs.detect { |a| File.basename(a) == name }
 		end
 
-		def generate_user_data
-			return config["user_data"] unless state["boot_scripts"]
-			s = "#!/bin/sh\n"
-			state["boot_scripts"].split(',').each do |script|
-				s += "curl -s \"#{Config.temp_script_url(script)}\" | sh\n"
-			end
-			s
+		def user_data
+			<<USER_DATA
+#!/bin/sh
+
+export DEBIAN_FRONTEND="noninteractive"
+export DEBIAN_PRIORITY="critical"
+apt-get update
+apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
+gem install kuzushi --no-rdoc --no-ri
+GEM_BIN=`ruby -r rubygems -e "puts Gem.bindir"`
+SECRET='abc123' $GEM_BIN/kuzushi #{state["virgin"] ? "init" : "start"} #{url}
+USER_DATA
+		end
+
+		def url
+			"#{Sumo::Config.couch_url}/#{name}"
 		end
 
 		def domain?
 			name.include? '.'
 		end
-		
-		def create_zerigo_host
-			Zerigo::DNS::Base.user = Config.zerigo_user
-			Zerigo::DNS::Base.api_key = Config.zerigo_api_key
 
-			# find zone if exists
-			zone = host = nil
-			Zerigo::DNS::Zone.all().each do |z|
-				if z.domain == name
-					zone = z
-					puts "  Zone #{zone.domain} found with id #{zone.id}."
-					break
-				end
-			end
+		def validate
+			### EC2 create_security_group
+			Sumo::Config.create_security_group
 
-			if not zone
-				begin
-					zone = Zerigo::DNS::Zone.create({:domain => name, :ns_type => 'pri_sec'})
-					puts "  Zone #{zone.domain} created successfully with id #{zone.id}."
-				rescue ResourceParty::ValidationError => e
-					puts "  There was an error saving the new zone."
-					puts e.message.join(', ')+'.'
-				end
-			end
-			
-			if not zone
-				puts "ERROR: Could not create Zone for #{name}."
-				return
-			end
-			
-			Zerigo::DNS::Host.all(:zone_id=>zone.id).each do |h|
-				if h.hostname == nil
-					host = h
-					break
-				end
-			end
-			
-			host_props = {
-				:hostname => '',
-				:host_type => 'A',
-				:data => state["elastic_ip"],
-				:zone_id => zone.id
-			}
-			
-			begin
-				if host
-					host.update(host_props) if host
+			### EC2 desctibe_key_pairs
+			k = Sumo::Config.ec2.describe_key_pairs.detect { |kp| kp[:aws_key_name] == config["key_name"] }
+
+			if k.nil?
+				if config["key_name"] == "sumo"
+					Sumo::Config.create_keypair  ## FIXME - do not create if it exists - tell the user to download and it and put it int the .sumo dir
 				else
-					host = Zerigo::DNS::Host.create(host_props)
+					raise "cannot use key_pair #{config["key_name"]} b/c it does not exist"
 				end
-				puts "  Host #{host.hostname} updated with id #{host.id}."
-			rescue ResourceParty::ValidationError => e
-				puts "  There was an error saving the new host."
-				puts e.message.join(', ')+'.'
 			end
 		end
+		
 	end
 end

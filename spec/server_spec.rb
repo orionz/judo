@@ -8,8 +8,6 @@ describe Sumo::Server do
 		Sumo::Server.stubs(:update_attributes!).returns(true)
 		@server = Sumo::Server.get_or_create(:name => 'example.com')
 		@server.stubs(:dns_name).returns('ec2-192-168-2-2.compute-1.amazonaws.com.')
-		
-		# configure zerigo stubs
 	end
 	
 	it "creates a new server" do
