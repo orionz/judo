@@ -15,6 +15,7 @@
 ### (12) Implement funciton wait_for_volumes_detached - should alert if volumes are attached to wrong instance (since it will wait forever)
 ### (13) Need to figure out availability_zone -> maybe config lists which ones to choose but state holds the the chosen one
 ### (14) Implement "sumo snapshot [NAME]" to take a snapshot of the ebs's blocks
+### (15) ruby 1.9.1 support
 
 module Sumo
 	class Server < Aws::ActiveSdb::Base
@@ -122,8 +123,9 @@ module Sumo
 		def self.create(attrs)
 			abort("Server needs a name") if attrs[:name].nil?
 			abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
+			Sumo::Config.read_config(attrs[:group]) ## make sure the config is valid
 			task("Creating server #{attrs[:name]}") { }
-			super(attrs)
+			super(attrs.merge(:virgin => true, :secret => rand(2 ** 128).to_s(36)))
 		end
 
 		def self.all
@@ -342,6 +344,7 @@ module Sumo
 		def self.commit
 			Config.group_dirs.each do |group_dir|
 				group = File.basename(group_dir)
+				next if Config.group and Config.group != group
 				puts "commiting #{group}"
 				doc = Config.couchdb.get(group) rescue {}
 				config = Config.read_config(group)
@@ -351,7 +354,7 @@ module Sumo
 				doc = Config.couchdb.get(response['id'])
 
 				# walk subdirs and save as _attachments
-				['templates', 'packages', 'scripts'].each { |subdir|
+				['files', 'templates', 'packages', 'scripts'].each { |subdir|
 					Dir["#{group_dir}/#{subdir}/*"].each do |f|
 						puts "storing attachment #{f}"
 						doc.put_attachment("#{subdir}/#{File.basename(f)}", File.read(f))
@@ -380,7 +383,7 @@ apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
 gem install kuzushi --no-rdoc --no-ri
 GEM_BIN=`ruby -r rubygems -e "puts Gem.bindir"`
-SECRET='abc123' $GEM_BIN/kuzushi #{state["virgin"] ? "init" : "start"} #{url}
+SECRET='#{state["secret"]}' $GEM_BIN/kuzushi #{state["virgin"] ? "init" : "start"} #{url}
 USER_DATA
 		end
 

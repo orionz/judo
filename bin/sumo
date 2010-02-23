@@ -39,12 +39,12 @@ class CLI < Thor
 			top_counter = Sumo::Server.all_group(group).map { |s| (s.name =~ /^#{s.group}.(\d*)$/); $1.to_i }.sort.last.to_i
 			n.times do |i|
 				top_counter += 1
-				server = Sumo::Server.create :group => group, :name => "#{group}.#{top_counter}", :virgin => true, :secret => rand(2 ** 128).to_s(36)
+				server = Sumo::Server.create :group => group, :name => "#{group}.#{top_counter}"
 				server.allocate_resources
 				server.start if start
 			end
 		else
-			server = Sumo::Server.create :group => group, :name => name, :virgin => true, :secret => rand(2 ** 128).to_s(36)
+			server = Sumo::Server.create :group => group, :name => name
 			server.allocate_resources
 			server.start if start
 		end
@@ -115,7 +115,7 @@ class CLI < Thor
 			end
 			printf "  UNGROUPED SERVERS\n"
 			servers.each do |s|
-				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.state["security_group"], s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
 			end
 		else
 			servers(*names) do |s|
