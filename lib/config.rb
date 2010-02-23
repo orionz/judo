@@ -34,21 +34,29 @@ module Sumo
 			load_config_stack(conf["import"], all << conf)
 		end
 
-		def config_repo
-			sumo_config["server_dir"] || sumo_dir
+		def repo_dir
+			sumo_config["repo"] || File.dirname(sumo_dir)
 		end
 
-		def server_dirs
-			Dir["#{config_repo}/**/config.json"].map { |d| File.dirname(d) }
+		def group_dirs
+			Dir["#{repo_dir}/*/config.json"].map { |d| File.dirname(d) }
 		end
 
-		def server_dir(name)
-			server_dirs.detect { |d| File.basename(d) == name }
+		def group_dir(name)
+			group_dirs.select { |d| File.basename(d) == name }
+		end
+
+		def groups
+			group_dirs.map { |g| File.basename(g) }
+		end
+
+		def group
+			File.basename(group_dirs.detect { |d| Dir.pwd =~ /^#{d}/ }) rescue nil
 		end
 
 		def read_config(name)
 			begin
-				JSON.parse(File.read("#{server_dir(name)}/config.json"))
+				JSON.parse(File.read("#{group_dir(name)}/config.json"))
 			rescue Errno::ENOENT
 				{}
 			end

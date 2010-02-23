@@ -1,20 +1,39 @@
 ## TODO
 
-## handle init functionality
-## implement server pools
+### there's a set of things that are still a little funny
+### (1) would be nice to have a two phase delete "sumo destroy; sumo trash:list; sumo trash:undelete; sumo trash:empty" - prevent mishaps
+### (2) need to flesh out the idea of the default config - should be able to have sumo 1.0 ease of use with this!
+### (3) need to be able to pin a config to a version of kuzushi - gem updates can/will break a lot of things
+### (4) should be able to specify security group rules in here - and have the security group configured on boot - no more special sumo config - just throw it in the default
+### (5) need to figure out a smart workflow for keypair.pem - might not be needed with kuzushi...
+### (6) sumo commit is really just pushing a filesystem - there's a better way to do this - git??
+### (7) files that are not templates?  I'm adding .erb to files that have no <% %> in them... thats dumb
+### (8) I want a "sumo monitor" command that will make start servers if they go down, and poke a listed port to make sure a service is listening, would be cool if it also detects wrong ami, wrong secuirity group, missing/extra volumes, missing/extra elastic_ip - might not want to force a reboot quite yet in these cases
+### (9) How cool would it be if this was all reimplemented in eventmachine and could start lots of boxes in parallel?  Would need to evented AWS api calls... Never seen a library to do that - would have to write our own... "Fog Machine?"
+### (10) Not so thrilled with simpledb - might want to consider other altrnatives / swappable backends - get rid of the active_sdb
+### (11) Should be outputting to a logger service - just have command line tool configure stdout as the logger
+### (12) Implement funciton wait_for_volumes_detached - should alert if volumes are attached to wrong instance (since it will wait forever)
+### (13) Need to figure out availability_zone -> maybe config lists which ones to choose but state holds the the chosen one
+### (14) Implement "sumo snapshot [NAME]" to take a snapshot of the ebs's blocks
 
 module Sumo
 	class Server < Aws::ActiveSdb::Base
 		set_domain_name :sumo_server
 
-		def self.search(*names)
-			query = names.map { |name| name =~ /(^%)|(%$)/ ? "name like ?" : "name = ?" }.join(" or ")
-			results = self.select(:all, :conditions => [ query, *names ])
+		def self.search(group, *names)
+			query = "group = ?"
+			results = self.select(:all, :conditions => [ query, group])
+			results = results.select { |r| names.include?(r.name) } unless names.empty?
 			names.map do |n|
 				results.detect { |r| r.name == n } or abort("No such server '#{n}'")
 			end
+			results
 		end
 		
+		def group
+			state["group"] || "default"
+		end
+
 		def name
 			state["name"]
 		end
@@ -24,7 +43,7 @@ module Sumo
 		end
 
 		def config
-			@config ||= Sumo::Config.merged_config(name)
+			@config ||= Sumo::Config.merged_config(group)
 		end
 
 		def state
@@ -32,7 +51,7 @@ module Sumo
 		end
 
 		def to_s
-			name
+			"#{group}:#{name}"
 		end
 
 		def stringify_keys_and_vals(hash)
@@ -67,8 +86,6 @@ module Sumo
 				if config["elastic_ip"] and not state["elastic_ip"]
 					### EC2 allocate_address
 					task("Adding an elastic ip") { add_ip(Sumo::Config.ec2.allocate_address) }
-				else
-					puts "Elastic ip #{config["elastic_ip"]} already exists."
 				end
 			rescue Aws::AwsError => e
 				if e.message =~ /AddressLimitExceeded/
@@ -79,7 +96,6 @@ module Sumo
 			end
 		end
 
-		### FIXME - also I should use a logger service for this rather than printf...
 		def task(msg, &block)
 			self.class.task(msg, &block)
 		end
@@ -103,35 +119,32 @@ module Sumo
 			save
 		end
 
-		def self.create(attrs) ## FIXME make this work -- also check for validate functions in the api
-		 	abort("Server needs a name") if attrs[:name].nil?
-		 	abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
+		def self.create(attrs)
+			abort("Server needs a name") if attrs[:name].nil?
+			abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
 			task("Creating server #{attrs[:name]}") { }
 			super(attrs)
-		end
-
-		def dir
-			Sumo::Config.server_dir(name)
-		end
-
-		def config?
-			dir ? "has config" : "no config"
 		end
 
 		def self.all
 			@@all ||= Server.find(:all)
 		end
 
-		def self.untracked
-			Sumo::Config.server_dirs
+		def self.all_group(group)
+			Server.find_all_by_group(group)
 		end
 
 		def has_ip?
-			state["elastic_ip"]
+			!!state["elastic_ip"]
 		end
 
 		def has_volumes?
 			not volumes.empty?
+		end
+
+		def ec2_volumes
+			return [] if volumes.empty?
+			Sumo::Config.ec2.describe_volumes( volumes.values )
 		end
 
 		def volumes
@@ -149,7 +162,6 @@ module Sumo
 			task("Deleting Elastic Ip") { remove_ip } if has_ip?
 			volumes.each { |dev,v| remove_volume(v,dev) }
 			task("Destroying server #{name}") { delete }
-			## FIXME - should we delete the server folder and config on disk?
 		end
 
 		def ec2_state
@@ -181,12 +193,19 @@ module Sumo
 			start
 		end
 
+		def generic_name?
+			name =~ /^#{group}[.]\d*$/
+		end
+
+		def generic?
+			volumes.empty? and not has_ip? and generic_name?
+		end
+
 		def stop
 			abort "not running" unless running?
 			## EC2 terminate_isntaces
 			task("Terminating instance") { Config.ec2.terminate_instances([ state["instance_id"] ]) }
-			## FIXME -- really I want to wait for the volumes to be in state detached
-			task("Wait for volumes to detach") { wait_for_termination } if volumes.size > 0
+			task("Wait for volumes to detach") { wait_for_volumes_detached } if volumes.size > 0
 			update_attributes! :instance_id => nil
 			reload
 		end
@@ -197,7 +216,7 @@ module Sumo
 			## EC2 launch_instances
 			result = Config.ec2.launch_instances(ami,
 				:instance_type => config["instance_size"],
-				:availability_zone => config["availability_zone"], ### FIXME
+				:availability_zone => config["availability_zone"],
 				:key_name => config["key_name"],
 				:group_ids => [config["security_group"]],
 				:user_data => user_data).first
@@ -235,8 +254,11 @@ module Sumo
 			end
 		end
 
+		def wait_for_volumes_detached
+			wait_for_termination
+		end
+
 		def wait_for_termination
-			## FIXME -- make SURE that the volumes are attached to the correct box - otherwise we will wait for ever - need a good error message...
 			loop do
 				reload
 				break if ec2_instance[:aws_state] == "terminated"
@@ -257,7 +279,6 @@ module Sumo
 			end
 		end
 
-		## FIXME -- need to figure out what to do with keypair.pem ...
 		def ssh(cmds)
 			IO.popen("ssh -i #{Config.keypair_file} #{user}@#{hostname} > ~/.sumo/ssh.log 2>&1", "w") do |pipe|
 				pipe.puts cmds.join(' && ')
@@ -269,6 +290,7 @@ module Sumo
 
 		def add_ip(public_ip)
 			## TODO - make sure its not in use
+			reload
 			update_attributes! :elastic_ip => public_ip
 			attach_ip
 		end
@@ -317,22 +339,20 @@ module Sumo
 			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
-		## FIXME - 3 types of servers - config and not state, state and no config, state and config...
-
 		def self.commit
-			Config.server_dirs.each do |config_dir|
-				name = File.basename(config_dir)
-				puts "commiting #{name}"
-				doc = Config.couchdb.get(name) rescue {}
-				config = Config.read_config(name)
-				config['_id'] = name
+			Config.group_dirs.each do |group_dir|
+				group = File.basename(group_dir)
+				puts "commiting #{group}"
+				doc = Config.couchdb.get(group) rescue {}
+				config = Config.read_config(group)
+				config['_id'] = group
 				config['_rev'] = doc['_rev'] if doc.has_key?('_rev')
 				response = Config.couchdb.save_doc(config)
 				doc = Config.couchdb.get(response['id'])
 
 				# walk subdirs and save as _attachments
 				['templates', 'packages', 'scripts'].each { |subdir|
-					Dir["#{config_dir}/#{subdir}/*"].each do |f|
+					Dir["#{group_dir}/#{subdir}/*"].each do |f|
 						puts "storing attachment #{f}"
 						doc.put_attachment("#{subdir}/#{File.basename(f)}", File.read(f))
 					end
@@ -350,10 +370,6 @@ module Sumo
 			super
 		end
 
-		def dir
-			Config.server_dirs.detect { |a| File.basename(a) == name }
-		end
-
 		def user_data
 			<<USER_DATA
 #!/bin/sh
@@ -369,11 +385,7 @@ USER_DATA
 		end
 
 		def url
-			"#{Sumo::Config.couch_url}/#{name}"
-		end
-
-		def domain?
-			name.include? '.'
+			"#{Sumo::Config.couch_url}/#{group}"
 		end
 
 		def validate
@@ -385,7 +397,7 @@ USER_DATA
 
 			if k.nil?
 				if config["key_name"] == "sumo"
-					Sumo::Config.create_keypair  ## FIXME - do not create if it exists - tell the user to download and it and put it int the .sumo dir
+					Sumo::Config.create_keypair
 				else
 					raise "cannot use key_pair #{config["key_name"]} b/c it does not exist"
 				end

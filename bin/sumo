@@ -23,18 +23,31 @@ class CLI < Thor
 		end
 	end
 
-	desc "create [NAME]", "create a persistent server"
-	def create(name = nil)
-		name = File.basename(Dir.pwd) if File.exists?("./config.json")
-		server = Sumo::Server.create :name => name, :virgin => true, :secret => rand(2 ** 128).to_s(36)
-    server.allocate_resources if Sumo::Config.server_dir(name)
+	desc "launch NAME", "create and start a persistent server"
+	def launch(name)
+		create(name, true)
 	end
 
-	desc "init", "inits the current folder as a sumo repository"
-	def init
-#		servers(*names) do |server|
-#			server.init_resources
-#		end
+	desc "create NAME", "create a persistent server"
+	def create(name, start = false)
+		group = Sumo::Config.group
+		fail "run create inside a group subfolder" unless group
+		if name =~ /^[+](\d*)/
+			n = $1.to_i
+			fail "woah nelly - that's too many - 5 or less pls" if n > 5
+			fail "woah nelly - that's not enough" if n < 1
+			top_counter = Sumo::Server.all_group(group).map { |s| (s.name =~ /^#{s.group}.(\d*)$/); $1.to_i }.sort.last.to_i
+			n.times do |i|
+				top_counter += 1
+				server = Sumo::Server.create :group => group, :name => "#{group}.#{top_counter}", :virgin => true, :secret => rand(2 ** 128).to_s(36)
+				server.allocate_resources
+				server.start if start
+			end
+		else
+			server = Sumo::Server.create :group => group, :name => name, :virgin => true, :secret => rand(2 ** 128).to_s(36)
+			server.allocate_resources
+			server.start if start
+		end
 	end
 
 	desc "restart NAME", "restart a running server"
@@ -48,11 +61,13 @@ class CLI < Thor
 	def stop(*names)
 		servers(*names) do |server|
 			server.stop
+			server.destroy if server.generic?
 		end
 	end
 
-	desc "destroy [NAMES]", "destroy a persistent server"
+	desc "destroy NAMES", "destroy a persistent server"
 	def destroy(*names)
+		raise "Must specify names of servers to destroy" if names.empty?
 		servers(*names) do |server|
 			server.destroy
 		end
@@ -61,18 +76,51 @@ class CLI < Thor
 	desc "info [NAMES]", "show server config"
 	def info(*names)
 		servers(*names) do |server|
-#			server.volumes.each do |dev,vol_id|
-			puts server.state.inspect
+			require 'pp'
+			puts "#{server}"
+			if server.ec2_instance and not server.ec2_instance.empty?
+				puts "\t[ EC2 ]"
+				[:aws_instance_id, :ssh_key_name, :aws_availability_zone, :aws_state, :aws_image_id, :dns_name, :aws_instance_type, :private_dns_name, :aws_launch_time, :aws_groups ].each do |k|
+					printf "\t %-24s: %s\n",k, server.ec2_instance[k]
+				end
+			end
+			puts "\t[ VOLUMES ]"
+			server.ec2_volumes.each do |v|
+				printf "\t %-13s %-10s %-10s %4d  %-10s %-8s\n",
+				v[:aws_id],
+				v[:aws_status],
+				v[:zone],
+				v[:aws_size],
+				v[:aws_attachment_status],
+				v[:aws_device]
+			end
+#			pp ({ :name => server.name , :group => server.group, :volumes => server.volumes, :hostname => server.hostname })
+#			pp server.volumes.inspect
+#			puts server.state.inspect
 				## EC2 describe_volumes
 #				puts "	#{dev.to_s}:#{Sumo::Config.ec2.describe_volumes([vol_id])}"
 #			end
 		end
 	end
 
-	desc "list", "list all servers"
-	def list
-		Sumo::Server.all.each do |s|
-			printf "%-18s %-11s %-11s %-13s %-10s %-10s %-12s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.config?, s.ip
+	desc "list [NAMES]", "list all servers"
+	def list(*names)
+		if Sumo::Config.group.nil?
+			servers = Sumo::Server.all
+			printf "  SERVER GROUPS\n"
+			Sumo::Config.groups.each do |g|
+				bucket = servers.select { |s| s.group == g }
+				servers = servers - bucket
+				printf "%-18s %s servers\n", g, bucket.size
+			end
+			printf "  UNGROUPED SERVERS\n"
+			servers.each do |s|
+				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+			end
+		else
+			servers(*names) do |s|
+				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+			end
 		end
 	end
 
@@ -119,9 +167,10 @@ class CLI < Thor
   end
 
 	no_tasks do
-		def servers(*names,&block)
-			names = [ File.basename(File.expand_path(".")) ] if names.empty?
-			Sumo::Server.search(*names).each do |server|
+		def servers(*names, &block)
+			raise "this command must be run in a server profile directory - no 'config.json' present" unless File.exists?("./config.json")
+			group = Sumo::Config.group
+			Sumo::Server.search(group, *names).each do |server|
 				begin
 					block.call(server)
 				rescue Object => e
