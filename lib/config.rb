@@ -51,7 +51,7 @@ module Sumo
 		end
 
 		def group
-			File.basename(group_dirs.detect { |d| Dir.pwd =~ /^#{d}/ }) rescue nil
+			File.basename(group_dirs.detect { |d| Dir.pwd == d or Dir.pwd =~ /^#{d}\// }) rescue nil
 		end
 
 		def read_config(name)

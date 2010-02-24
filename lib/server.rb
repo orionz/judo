@@ -16,6 +16,7 @@
 ### (13) Need to figure out availability_zone -> maybe config lists which ones to choose but state holds the the chosen one
 ### (14) Implement "sumo snapshot [NAME]" to take a snapshot of the ebs's blocks
 ### (15) ruby 1.9.1 support
+### (16) find a good way to set the hostname or prompt to :name
 
 module Sumo
 	class Server < Aws::ActiveSdb::Base
