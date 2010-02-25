@@ -97,30 +97,10 @@ module Sumo
 			Sumo::Server.create_domain
 		end
 
-		def purge
-			## FIXME -- ??
-			puts "PURGE"
-			Sumo::Server.delete_domain
-		end
-
 		def setup?
 			Sumo::Server.connection.list_domains[:domains].include? Sumo::Server.domain
 		end
 		
-		def upload_script(filename)
-			scripts_bucket.put(File.basename(filename), File.new(filename,"r").read)
-		end
-		
-		def list_scripts
-			scripts_bucket.keys.each do |k|
-				puts k, self.temp_script_url(k.to_s)
-			end
-		end
-
-		def self.temp_script_url(key, expires=300)
-			scripts_bucket.s3.interface.get_link(scripts_bucket.to_s, key, Time.now.to_i + expires)
-		end
-
 		def create_keypair
 			## EC2 create_key_pair
 			material = ec2.create_key_pair("sumo")[:aws_material]
@@ -136,8 +116,6 @@ module Sumo
 			ec2.authorize_security_group_IP_ingress("sumo", 22, 22,'tcp','0.0.0.0/0')
 		rescue Aws::AwsError
 		end
-
-		private
 
 		def sumo_config
 			@config ||= read_sumo_config
@@ -163,14 +141,20 @@ module Sumo
 		rescue Errno::ENOENT
 			{}
 		end
-		
+
 		def s3
-			@s3 ||= RightAws::S3.new(access_id, access_secret, :logger => Logger.new(nil))
+#			@s3 ||= RightAws::S3.new(access_id, access_secret, :logger => Logger.new(nil))
+#			@s3 ||= Aws::S3.new(access_id, access_secret)
+      @s3 = Fog::AWS::S3.new( :aws_access_key_id => access_id, :aws_secret_access_key => access_secret)
 		end
-		
-		def scripts_bucket
-			name = access_id # is this a bad idea for some reason?
-			@scripts_bucket ||= s3.bucket(name, true)
+
+		def s3_url(k)
+			s3.get_object_url(sumo_config["s3_bucket"], k,Time.now.to_i + 100_000_000)
 		end
+
+		def s3_put(k, file)
+			s3.put_object(sumo_config["s3_bucket"], k, file)
+		end
+
 	end
 end

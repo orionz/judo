@@ -1,19 +1,22 @@
 ## TODO
 
-### there's a set of things that are still a little funny
-### (1) would be nice to have a two phase delete "sumo destroy; sumo trash:list; sumo trash:undelete; sumo trash:empty" - prevent mishaps
-### (2) need to flesh out the idea of the default config - should be able to have sumo 1.0 ease of use with this!
+### Do now
+### (*) fix simpledb - make sure its reliable
+### (*) Need to figure out availability_zone -> maybe config lists which ones to choose but state holds the the chosen one
+### (*) need to flesh out the idea of the default config - should be able to have sumo 1.0 ease of use with this!
+### (*) should be able to specify security group rules in here - and have the security group configured on boot - no more special sumo config - just throw it in the default
+### (*) need to figure out a smart workflow for keypair.pem - might not be needed with kuzushi...
+### (*) enforce template files end in .erb to make room for other possible templates as defined by the extensions
+### (*) would be nice to have a two phase delete "sumo destroy; sumo trash:list; sumo trash:undelete; sumo trash:empty" - prevent mishaps
+
+### Do Later
 ### (3) need to be able to pin a config to a version of kuzushi - gem updates can/will break a lot of things
-### (4) should be able to specify security group rules in here - and have the security group configured on boot - no more special sumo config - just throw it in the default
-### (5) need to figure out a smart workflow for keypair.pem - might not be needed with kuzushi...
-### (6) sumo commit is really just pushing a filesystem - there's a better way to do this - git??
-### (7) files that are not templates?  I'm adding .erb to files that have no <% %> in them... thats dumb
+### (6) sumo commit is really just pushing a filesystem - there's a better way to do this - git?? - compile a slug?
+### --
 ### (8) I want a "sumo monitor" command that will make start servers if they go down, and poke a listed port to make sure a service is listening, would be cool if it also detects wrong ami, wrong secuirity group, missing/extra volumes, missing/extra elastic_ip - might not want to force a reboot quite yet in these cases
 ### (9) How cool would it be if this was all reimplemented in eventmachine and could start lots of boxes in parallel?  Would need to evented AWS api calls... Never seen a library to do that - would have to write our own... "Fog Machine?"
-### (10) Not so thrilled with simpledb - might want to consider other altrnatives / swappable backends - get rid of the active_sdb
 ### (11) Should be outputting to a logger service - just have command line tool configure stdout as the logger
-### (12) Implement funciton wait_for_volumes_detached - should alert if volumes are attached to wrong instance (since it will wait forever)
-### (13) Need to figure out availability_zone -> maybe config lists which ones to choose but state holds the the chosen one
+### --
 ### (14) Implement "sumo snapshot [NAME]" to take a snapshot of the ebs's blocks
 ### (15) ruby 1.9.1 support
 ### (16) find a good way to set the hostname or prompt to :name
@@ -79,7 +82,7 @@ module Sumo
 							puts "Volume #{device} already exists."
 						end
 					else
-						puts "device #{device} is not of media type 'ebs', skipping..."
+						puts "device #{device || volume_config["mount"]} is not of media type 'ebs', skipping..."
 					end
 				end
 			end
@@ -155,7 +158,7 @@ module Sumo
 		end
 
 		def remove_ip
-			Sumo::Config.ec2.release_address(state["elastic_ip"])
+			Sumo::Config.ec2.release_address(state["elastic_ip"]) rescue nil
 			update_attributes! :elastic_ip => nil
 		end
 
@@ -258,7 +261,10 @@ module Sumo
 		end
 
 		def wait_for_volumes_detached
-			wait_for_termination
+			loop do
+				break if ec2_volumes.reject { |v| v[:aws_status] == "available" }.empty?
+				sleep 2
+			end
 		end
 
 		def wait_for_termination
@@ -380,11 +386,12 @@ module Sumo
 
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
+export SECRET='#{state["secret"]}'
 apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
 gem install kuzushi --no-rdoc --no-ri
 GEM_BIN=`ruby -r rubygems -e "puts Gem.bindir"`
-SECRET='#{state["secret"]}' $GEM_BIN/kuzushi #{state["virgin"] ? "init" : "start"} #{url}
+$GEM_BIN/kuzushi #{state["virgin"] ? "init" : "start"} #{url}
 USER_DATA
 		end
 

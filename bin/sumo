@@ -113,10 +113,10 @@ class CLI < Thor
 				servers = servers - bucket
 				printf "%-18s %s servers\n", g, bucket.size
 			end
-			printf "  UNGROUPED SERVERS\n"
-			servers.each do |s|
-				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.state["security_group"], s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
-			end
+#			printf "  UNGROUPED SERVERS\n"
+#			servers.each do |s|
+#				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.state["security_group"], s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+#			end
 		else
 			servers(*names) do |s|
 				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
@@ -163,7 +163,8 @@ class CLI < Thor
 
 	desc "commit", "push configs and files to couchdb"
 	def commit
-    Sumo::Server.commit
+#		group = Sumo::Config.group
+		Sumo::Server.commit
   end
 
 	no_tasks do
