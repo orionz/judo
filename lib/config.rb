@@ -213,7 +213,7 @@ module Judo
 			end
 
 			puts "setting up an s3 bucket"
-			s3_bucket = ENV['SUMO_S3_BUCKET'] || "judo_#{rand(2**128).to_s(16)}"
+			s3_bucket = ENV['JUDO_S3_BUCKET'] || "judo_#{rand(2**128).to_s(16)}"
    		Fog::AWS::S3.new( :aws_access_key_id => aws_id, :aws_secret_access_key => aws_secret).put_bucket(s3_bucket)
 
 			puts "setting up an .judo/config.yml"

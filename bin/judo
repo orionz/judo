@@ -132,7 +132,7 @@ class CLI < Thor
 		end
 	end
 
-	desc "init", "create a new sumo repository in the current directory"
+	desc "init", "create a new judo repository in the current directory"
 	def init
 		Judo::Config.init
 	end
@@ -144,7 +144,7 @@ class CLI < Thor
 		printf "%s\n", ("-" * 80)
 		### EC2 describe_volumes
 		Judo::Config.ec2.describe_volumes.map do |volume|
-			[ volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device] || "", instance_id_to_sumo(volume[:aws_instance_id]) || volume[:aws_instance_id] || "", volume_id_to_sumo(volume[:aws_id]) ]
+			[ volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device] || "", instance_id_to_judo(volume[:aws_instance_id]) || volume[:aws_instance_id] || "", volume_id_to_judo(volume[:aws_id]) ]
 		end.sort { |a,b| [ a[5].to_s, a[3].to_s ] <=> [ b[5].to_s, b[3].to_s ] }.each do |d|
 			printf format, *d
 		end
@@ -157,7 +157,7 @@ class CLI < Thor
 		printf "%s\n", ("-"*57)
 		## EC2 describe_addresses
 		Judo::Config.ec2.describe_addresses.map do |ip|
-			[ ip[:public_ip], instance_id_to_sumo(ip[:instance_id]) || ip[:instance_id], ip_to_sumo(ip[:public_ip]) ]
+			[ ip[:public_ip], instance_id_to_judo(ip[:instance_id]) || ip[:instance_id], ip_to_judo(ip[:public_ip]) ]
 		end.sort { |a,b| a[2].to_s <=> b[2].to_s }.each do |d|
 			printf format, *d
 		end
@@ -195,15 +195,15 @@ class CLI < Thor
 			result
 		end
 
-		def volume_id_to_sumo(volume)
+		def volume_id_to_judo(volume)
 			Judo::Server.all.detect { |s| s.volumes.invert[volume] }
 		end
 
-		def ip_to_sumo(ip)
+		def ip_to_judo(ip)
 			Judo::Server.all.detect { |s| s.state["elastic_ip"] == ip }
 		end
 
-		def instance_id_to_sumo(instance_id)
+		def instance_id_to_judo(instance_id)
 			Judo::Server.all.detect { |s| s.state["instance_id"] and s.state["instance_id"] == instance_id }
 		end
 	end
