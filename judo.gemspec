@@ -4,16 +4,16 @@
 # -*- encoding: utf-8 -*-
 
 Gem::Specification.new do |s|
-  s.name = %q{sumo}
-  s.version = "0.4.0"
+  s.name = %q{judo}
+  s.version = "0.0.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.authors = ["Adam Wiggins"]
-  s.date = %q{2010-02-23}
-  s.default_executable = %q{sumo}
+  s.authors = ["Orion Henry"]
+  s.date = %q{2010-03-02}
+  s.default_executable = %q{judo}
   s.description = %q{A no-hassle way to launch one-off EC2 instances from the command line}
-  s.email = %q{adam@heroku.com}
-  s.executables = ["sumo"]
+  s.email = %q{orion@heroku.com}
+  s.executables = ["judo"]
   s.extra_rdoc_files = [
     "README.rdoc"
   ]
@@ -21,18 +21,18 @@ Gem::Specification.new do |s|
     "README.rdoc",
      "Rakefile",
      "VERSION",
-     "bin/sumo",
+     "bin/judo",
      "lib/all.rb",
      "lib/config.rb",
-     "lib/couchrest_hacks.rb",
+     "lib/group.rb",
      "lib/server.rb",
      "spec/base.rb",
      "spec/server_spec.rb"
   ]
-  s.homepage = %q{http://github.com/adamwiggins/sumo}
+  s.homepage = %q{http://github.com/orionz/judo}
   s.rdoc_options = ["--charset=UTF-8"]
   s.require_paths = ["lib"]
-  s.rubyforge_project = %q{sumo}
+  s.rubyforge_project = %q{judo}
   s.rubygems_version = %q{1.3.5}
   s.summary = %q{A no-hassle way to launch one-off EC2 instances from the command line}
   s.test_files = [

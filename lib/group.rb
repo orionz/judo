@@ -1,13 +1,13 @@
-module Sumo
+module Judo
 	class Group
 		attr_accessor :name, :dir
 
     def self.dirs
-      Dir["#{Sumo::Config.repo_dir}/*/config.json"].map { |d| File.dirname(d) }
+      Dir["#{Judo::Config.repo_dir}/*/config.json"].map { |d| File.dirname(d) }
     end
 
 		def self.all
-			@@all ||= dirs.map { |d| new(d) }
+			@@all ||= (dirs.map { |d| new(d) } << Group.new(Judo::Config.judo_dir, "default"))
 		end
 
 		def self.find(name)
@@ -19,20 +19,37 @@ module Sumo
 		end
 
     def self.current
-      File.basename(all.detect { |d| Dir.pwd == d.dir or Dir.pwd =~ /^#{d}\// }) rescue nil
+      all.detect { |d| Dir.pwd == d.dir or Dir.pwd =~ /^#{d.dir}\// } || find("default")
     end
 
-		def initialize(dir)
-			@name = File.basename(dir)
+		def initialize(dir, name = File.basename(dir))
+			@name = name
 			@dir = dir
+		end
+
+		def create_server(server_name)
+      abort("Server needs a name") if server_name.nil?
+#     abort("Already a server named #{server_name}") if Judo::Server.find_by_name(attrs[:name])  ## FIXME
+#     Judo::Config.read_config(attrs[:group]) ## make sure the config is valid  ## FIXME
+
+      server = Judo::Server.new server_name, self
+      server.task("Creating server #{server_name}") do
+      	server.update "name" => server_name, "group" => name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36)
+				Judo::Config.sdb.put_attributes("judo_config", "groups", name => server_name)
+			end
+			server
 		end
 		
 		def config
 			@config ||= self.class.load_all(self)
 		end
+	
+		def server_names
+			Judo::Config.sdb.get_attributes("judo_config", "groups", @name)[:attributes][@name] || []
+		end
 
 		def servers
-			Server.find_all_by_group(name)
+			server_names.map { |n| Judo::Server.new(n, self) }
 		end
 
 		def compile
@@ -48,7 +65,7 @@ module Sumo
 				Dir.chdir("..") do
 					system "tar czvf #{tar_file} #{name}"
 					puts "Uploading to s3..."
-					Sumo::Config.s3_put(tar_file, File.new(tar_file))
+					Judo::Config.s3_put(tar_file, File.new(tar_file))
 				end
 			end
 		end
@@ -58,7 +75,7 @@ module Sumo
 		end
 
 		def s3_url 
-			@url = Sumo::Config.s3_url(tar_file)
+			@url = Judo::Config.s3_url(tar_file)
 		end
 
 		def cp_file
@@ -102,23 +119,48 @@ module Sumo
 			files
 		end
 
+		def keypair_file
+			(attachments.select { |a| File.basename(config["keypair"]) }) || fail("no keypair_file specified")
+		end
+
 		def attachments
 			extract(config, {})
 		end
 
 		def self.load_all(group, configs = [])
-      return configs.reverse.inject({}) { |sum,conf| sum.merge(conf) } unless group
+      return configs.reverse.inject(Judo::Config.defaults) { |sum,conf| sum.merge(conf) } unless group
 			raw_config = group.read_config
 			load_all(find(raw_config["import"]), configs << raw_config)
 		end
 
+		def config_file
+				return "#{dir}/defaults.json" if name == "default"
+        "#{dir}/config.json"
+		end
+
     def read_config
       begin
-        JSON.parse(File.read("#{dir}/config.json"))
+        JSON.parse(File.read(config_file))
       rescue Errno::ENOENT
         {}
       end
     end
+
+		def delete_server(server)
+			sdb.delete_attributes("judo_config", "groups", name => server.name)
+		end
+
+		def default?
+			false
+		end
+
+		def to_s
+			name
+		end
+
+		def sdb
+			Judo::Config.sdb
+		end
 	end
 end
 

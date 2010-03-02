@@ -1,69 +1,151 @@
-## TODO
+### NEEDED for new gem launch
 
-### Do now
-### (*) fix simpledb - make sure its reliable
-### (*) Need to figure out availability_zone -> maybe config lists which ones to choose but state holds the the chosen one
-### (*) need to flesh out the idea of the default config - should be able to have sumo 1.0 ease of use with this!
-### (*) should be able to specify security group rules in here - and have the security group configured on boot - no more special sumo config - just throw it in the default
-### (*) need to figure out a smart workflow for keypair.pem - might not be needed with kuzushi...
-### (*) enforce template files end in .erb to make room for other possible templates as defined by the extensions
-### (*) would be nice to have a two phase delete "sumo destroy; sumo trash:list; sumo trash:undelete; sumo trash:empty" - prevent mishaps
+### 32 hrs to go - 12:00am Feb 26th - expected completion Mar 2
+### [ ] judo init (2 hrs)
+### [ ] implement real default config - remove special case code (3 hrs)
+### [ ] complete slug compile - load into s3 (4 hrs)
+### [ ] refactor availability_zone (2 hrs)
+### [ ] refactor keypair.pem setup (3 hrs)
+### [ ] implement auto security_group creation and setup (6 hrs)
+### [ ] version in the db - require upgrade of gem if db version ahead (1 hr)
+### [ ] write some examples - simple postgres/redis/couchdb server (5hrs)
+### [ ] two phase delete (1 hr)
+### [ ] write new README (4 hrs)
+### [ ] realase new gem! (1 hr)
+
+### [ ] user a logger service (1 hr)
+### [ ] write 4 simple specs (1 hr)
 
 ### Do Later
-### (3) need to be able to pin a config to a version of kuzushi - gem updates can/will break a lot of things
-### (6) sumo commit is really just pushing a filesystem - there's a better way to do this - git?? - compile a slug?
-### --
-### (8) I want a "sumo monitor" command that will make start servers if they go down, and poke a listed port to make sure a service is listening, would be cool if it also detects wrong ami, wrong secuirity group, missing/extra volumes, missing/extra elastic_ip - might not want to force a reboot quite yet in these cases
-### (9) How cool would it be if this was all reimplemented in eventmachine and could start lots of boxes in parallel?  Would need to evented AWS api calls... Never seen a library to do that - would have to write our own... "Fog Machine?"
-### (11) Should be outputting to a logger service - just have command line tool configure stdout as the logger
-### --
-### (14) Implement "sumo snapshot [NAME]" to take a snapshot of the ebs's blocks
-### (15) ruby 1.9.1 support
-### (16) find a good way to set the hostname or prompt to :name
+### [ ] use amazon's new conditional write tools so we never have problems from concurrent updates
+### [ ] is thor really what we want to use here?
+### [ ] need to be able to pin a config to a version of kuzushi - gem updates can/will break a lot of things
+### [ ] I want a "judo monitor" command that will make start servers if they go down, and poke a listed port to make sure a service is listening, would be cool if it also detects wrong ami, wrong secuirity group, missing/extra volumes, missing/extra elastic_ip - might not want to force a reboot quite yet in these cases
+### [ ] Implement "judo snapshot [NAME]" to take a snapshot of the ebs's blocks
+### [ ] ruby 1.9.1 support
+### [ ] find a good way to set the hostname or prompt to :name
+### [ ] remove fog/s3 dependancy
+### [ ] enforce template files end in .erb to make room for other possible templates as defined by the extensions
+### [ ] zerigo integration for automatic DNS setup
+### [ ] How cool would it be if this was all reimplemented in eventmachine and could start lots of boxes in parallel?  Would need to evented AWS api calls... Never seen a library to do that - would have to write our own... "Fog Machine?"
 
-module Sumo
-	class Server < Aws::ActiveSdb::Base
-		set_domain_name :sumo_server
+module Judo
+	class Server
+		attr_accessor :name, :group
 
-		def self.search(group, *names)
-			query = "group = ?"
-			results = self.select(:all, :conditions => [ query, group])
-			results = results.select { |r| names.include?(r.name) } unless names.empty?
-			names.map do |n|
-				results.detect { |r| r.name == n } or abort("No such server '#{n}'")
+		def initialize(name, group)
+			@name = name
+			@group = group
+		end
+
+### Getting things in and out of SimpleDB - would be nice if it were a plugin so we could use another store if need db (couchdb/mongo/sql)
+
+		def self.migrate
+			require 'pp'
+			x = {}
+			Judo::Config.sdb.delete_domain("judo_servers")
+			Judo::Config.sdb.create_domain("judo_servers")
+			Judo::Config.sdb.delete_domain("judo_config")
+			Judo::Config.sdb.create_domain("judo_config")
+			Judo::Config.sdb.select("SELECT * FROM sumo_server").items.each do |chunk|
+				chunk.each do |uid,item|
+					name = item["name"] || "missing_#{rand(2**32).to_s(36)}"
+					group = (item["group"] || "default")
+					data = {
+						"group" => (item["group"] || "default" ), "name" => name,
+						"secret" => item["secret"], "elastic_ip" => item["elastic_ip"],
+						"volumes" => (item["volumes_flat"] || JSON.parse(item["volumes_json"] || "[]").map { |k,v| "#{k}:#{v}" }),
+						"instance_id" => item["instance_id"], "virgin" => item["virgin"]
+					}.delete_if { |k,v| v == [] or v == nil or v == [nil] }
+					pp data
+					Judo::Config.sdb.put_attributes("judo_servers", name, data, :replace)
+					Judo::Config.sdb.put_attributes("judo_config", "groups", group => name)
+				end
 			end
-			results
-		end
-		
-		def group
-			state["group"] || "default"
+			"ok"
 		end
 
-		def name
-			state["name"]
+		def domain
+			"judo_servers"
 		end
+
+		def sdb
+			Judo::Config.sdb
+		end
+
+		def fetch_state
+			Judo::Config.sdb.get_attributes(domain, name)[:attributes]
+		end
+
+		def super_state
+			@@state ||= {}
+		end
+
+		def state
+			super_state[name] ||= fetch_state
+		end
+
+		def get(key)
+			state[key] && [state[key]].flatten.first
+		end
+
+		def instance_id
+			get "instance_id"
+		end
+
+		def elastic_ip
+			get "elastic_ip"
+		end
+
+		def virgin?
+			get("virgin").to_s == "true"  ## I'm going to set it to true and it will come back from the db as "true" -> could be "false" or false or nil also
+		end
+
+		def secret
+			get "secret"
+		end
+
+		def volumes
+			Hash[ (state["volumes"] || []).map { |a| a.split(":") } ]
+		end
+
+		def update(attrs)
+			sdb.put_attributes(domain, name, attrs, :replace)
+			state.merge! attrs
+		end
+
+		def add(key, value)
+			sdb.put_attributes(domain, name, { key => value })
+			(state[key] ||= []) << value
+		end
+
+		def remove(key, value = nil)
+			if value
+				sdb.delete_attributes(domain, name, key => value)
+				state[key] - [value]
+			else
+				sdb.delete_attributes(domain, name, [ key ])
+				state.delete(key)
+			end
+		end
+
+		def delete
+			group.delete_server(self)
+			sdb.delete_attributes(domain, name)
+		end
+
+######## end simple DB access  #######
 
 		def instance_size
 			config["instance_size"]
 		end
 
 		def config
-			@config ||= Sumo::Config.merged_config(group)
-		end
-
-		def state
-			stringify_keys_and_vals(@attributes)
+			group.config
 		end
 
 		def to_s
 			"#{group}:#{name}"
-		end
-
-		def stringify_keys_and_vals(hash)
-			hash.inject({}) do |options, (key, value)|
-				options[key.to_s] = value.to_s
-				options
-			end
 		end
 
 		def allocate_resources
@@ -75,7 +157,7 @@ module Sumo
 						if not volumes[device]
 							task("Creating EC2 Volume #{device} #{size}") do
 								### EC2 create_volume
-								volume_id = Sumo::Config.ec2.create_volume(nil, size, config["availability_zone"])[:aws_id]
+								volume_id = Judo::Config.ec2.create_volume(nil, size, config["availability_zone"])[:aws_id]
 								add_volume(volume_id, device)
 							end
 						else
@@ -88,9 +170,12 @@ module Sumo
 			end
 
 			begin
-				if config["elastic_ip"] and not state["elastic_ip"]
+				if config["elastic_ip"] and not elastic_ip
 					### EC2 allocate_address
-					task("Adding an elastic ip") { add_ip(Sumo::Config.ec2.allocate_address) }
+					task("Adding an elastic ip") do 
+						ip = Judo::Config.ec2.allocate_address
+						add_ip(ip)
+					end
 				end
 			rescue Aws::AwsError => e
 				if e.message =~ /AddressLimitExceeded/
@@ -117,31 +202,8 @@ module Sumo
 			result
 		end
 
-		def update_attributes!(args)
-			args.each do |key,value|
-				self[key] = value
-			end
-			save
-		end
-
-		def self.create(attrs)
-			abort("Server needs a name") if attrs[:name].nil?
-			abort("Already a server named #{attrs[:name]}") if Sumo::Server.find_by_name(attrs[:name])
-			Sumo::Config.read_config(attrs[:group]) ## make sure the config is valid
-			task("Creating server #{attrs[:name]}") { }
-			super(attrs.merge(:virgin => true, :secret => rand(2 ** 128).to_s(36)))
-		end
-
-		def self.all
-			@@all ||= Server.find(:all)
-		end
-
-		def self.all_group(group)
-			Server.find_all_by_group(group)
-		end
-
 		def has_ip?
-			!!state["elastic_ip"]
+			!!elastic_ip
 		end
 
 		def has_volumes?
@@ -150,16 +212,12 @@ module Sumo
 
 		def ec2_volumes
 			return [] if volumes.empty?
-			Sumo::Config.ec2.describe_volumes( volumes.values )
-		end
-
-		def volumes
-			Hash[ (@attributes["volumes_flat"] || []).map { |a| a.split(":") } ]
+			Judo::Config.ec2.describe_volumes( volumes.values )
 		end
 
 		def remove_ip
-			Sumo::Config.ec2.release_address(state["elastic_ip"]) rescue nil
-			update_attributes! :elastic_ip => nil
+			Judo::Config.ec2.release_address(elastic_ip) rescue nil
+			remove "elastic_ip"
 		end
 
 		def destroy
@@ -177,7 +235,7 @@ module Sumo
 		def ec2_instance
 			### EC2 describe_instances
 			@@ec2_list ||= Config.ec2.describe_instances
-			@@ec2_list.detect { |e| e[:aws_instance_id] == state["instance_id"] } or {}
+			@@ec2_list.detect { |e| e[:aws_instance_id] == instance_id } or {}
 		end
 
 		def running?
@@ -190,7 +248,7 @@ module Sumo
 			task("Starting server #{name}")      { launch_ec2 }
 			task("Acquire hostname")             { wait_for_hostname }
 			task("Wait for ssh")                 { wait_for_ssh }
-			task("Attaching ip")                 { attach_ip } if state["elastic_ip"]
+			task("Attaching ip")                 { attach_ip } if elastic_ip
 			task("Attaching volumes")            { attach_volumes } if has_volumes?
 		end
 
@@ -210,10 +268,9 @@ module Sumo
 		def stop
 			abort "not running" unless running?
 			## EC2 terminate_isntaces
-			task("Terminating instance") { Config.ec2.terminate_instances([ state["instance_id"] ]) }
+			task("Terminating instance") { Config.ec2.terminate_instances([ instance_id ]) }
 			task("Wait for volumes to detach") { wait_for_volumes_detached } if volumes.size > 0
-			update_attributes! :instance_id => nil
-			reload
+			remove "instance_id" 
 		end
 
 		def launch_ec2
@@ -227,13 +284,13 @@ module Sumo
 				:group_ids => [config["security_group"]],
 				:user_data => user_data).first
 
-			## can find : :aws_availability_zone
-			update_attributes! :instance_id => result[:aws_instance_id], :virgin => nil
+			update "instance_id" => result[:aws_instance_id], "virgin" => false
+#			remove "virgin"
 		end
 
 		def console_output
 			### EC2 get_console_output
-			Config.ec2.get_console_output(state["instance_id"])[:aws_output]
+			Config.ec2.get_console_output(instance_id)[:aws_output]
 		end
 
 		def ami
@@ -288,64 +345,51 @@ module Sumo
 			end
 		end
 
-		def ssh(cmds)
-			IO.popen("ssh -i #{Config.keypair_file} #{user}@#{hostname} > ~/.sumo/ssh.log 2>&1", "w") do |pipe|
-				pipe.puts cmds.join(' && ')
-			end
-			unless $?.success?
-				abort "failed\nCheck ~/.sumo/ssh.log for the output"
-			end
-		end
-
 		def add_ip(public_ip)
-			## TODO - make sure its not in use
-			reload
-			update_attributes! :elastic_ip => public_ip
+			update "elastic_ip" => public_ip
 			attach_ip
 		end
 
 		def attach_ip
-			return unless running? and state["elastic_ip"]
+			return unless running? and elastic_ip
 			### EC2 associate_address
-			Config.ec2.associate_address(state["instance_id"], state["elastic_ip"])
-			reload
+			Config.ec2.associate_address(instance_id, elastic_ip)
 		end
 		
 		def dns_name
-			return nil unless state["elastic_ip"]
-			`dig +short -x #{state["elastic_ip"]}`.strip
+			return nil unless elastic_ip
+			`dig +short -x #{elastic_ip}`.strip
 		end
 
 		def attach_volumes
 			return unless running?
 			volumes.each do |device,volume_id|
 				### EC2 attach_volume
-				Config.ec2.attach_volume(volume_id, state["instance_id"], device)
+				Config.ec2.attach_volume(volume_id, instance_id, device)
 			end
 		end
 
 		def remove_volume(volume_id, device)
 			task("Deleting #{device} #{volume_id}") do
 				### EC2 delete_volume
-				Sumo::Config.ec2.delete_volume(volume_id)
-				delete_values( :volumes_flat => "#{device}:#{volume_id}" )
+				Judo::Config.ec2.delete_volume(volume_id)
+				remove "volumes", "#{device}:#{volume_id}"
 			end
 		end
 
 		def add_volume(volume_id, device)
 			abort("Server already has a volume on that device") if volumes[device]
-			reload  ## important to try and minimize race conditions with other potential clients
-			@attributes["volumes_flat"] = "#{device}:#{volume_id}"
-			put
-			reload ## important so we don't overwrite volumes_flat later
-			### EC2 attach_volume
-			Config.ec2.attach_volume(volume_id, state["instance_id"], device) if running?
+
+			add "volumes", "#{device}:#{volume_id}"
+
+			Config.ec2.attach_volume(volume_id, instance_id, device) if running?
+
 			volume_id
 		end
 
 		def connect_ssh
 			abort "not running" unless running?
-			system "ssh -i #{Sumo::Config.keypair_file} #{config["user"]}@#{hostname}"
+			system "ssh -i #{group.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		
 		def self.commit
@@ -376,8 +420,7 @@ module Sumo
 
 		def reload
 			@@ec2_list = nil
-#			@config = nil
-			super
+			super_state.delete(name)
 		end
 
 		def user_data
@@ -386,29 +429,29 @@ module Sumo
 
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
-export SECRET='#{state["secret"]}'
+export SECRET='#{secret}'
 apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
 gem install kuzushi --no-rdoc --no-ri
 GEM_BIN=`ruby -r rubygems -e "puts Gem.bindir"`
-$GEM_BIN/kuzushi #{state["virgin"] ? "init" : "start"} #{url}
+$GEM_BIN/kuzushi #{virgin? && "init" || "start"} #{url}
 USER_DATA
 		end
 
 		def url
-			"#{Sumo::Config.couch_url}/#{group}"
+			"#{Judo::Config.couch_url}/#{group}"
 		end
 
 		def validate
 			### EC2 create_security_group
-			Sumo::Config.create_security_group
+			Judo::Config.create_security_group
 
 			### EC2 desctibe_key_pairs
-			k = Sumo::Config.ec2.describe_key_pairs.detect { |kp| kp[:aws_key_name] == config["key_name"] }
+			k = Judo::Config.ec2.describe_key_pairs.detect { |kp| kp[:aws_key_name] == config["key_name"] }
 
 			if k.nil?
-				if config["key_name"] == "sumo"
-					Sumo::Config.create_keypair
+				if config["key_name"] == "judo"
+					Judo::Config.create_keypair
 				else
 					raise "cannot use key_pair #{config["key_name"]} b/c it does not exist"
 				end

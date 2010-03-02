@@ -1,82 +1,4 @@
-= Tired of wrestling with server provisioning?  Sumo!
-
-Want to launch and manage persistent utility servers on EC2?  ec2-run-instances got you down?  Try this:
-
-    $ sumo create mybox
-    Created server mybox
-    $ sumo list
-    mybox          i-8a3d05e2  m1.small   ami-1515f67c
-    $ sumo launch mybox
-    ---> Launch server mybox...   done (1.9s)
-    ---> Acquire hostname...      ec2-75-101-254-61.compute-1.amazonaws.com (34.0s)
-    ---> Wait for ssh...          done (3.1s)
-
-    Logging you in via ssh.  Type 'exit' or Ctrl-D to return to your local system.
-    ------------------------------------------------------------------------------
-    ...
-    root@domU-12-31-39-04-31-37:~# 
-
-== Setup
-
-Dependencies:
-
-    $ sudo gem install thor aws right_aws
-
-Then create ~/.sumo/config.yml containing:
-
-    ---
-    access_id: <your amazon access key id>
-    access_secret: <your amazon secret access key>
-
-You'll need Bacon and Mocha if you want to run the specs, and Jewler if you want to create gems.
-
-== Usage
-
-Create a named persistent server:
-
-    $ sumo create mybox
-    Created server mybox
-
-See config vars on the server record:
-
-    $ sumo info mybox
-    mybox:
-       availability_zone:"us-east-1d"
-       ami32:"ami-1515f67c"
-       user:"ubuntu"
-       key_name:"sumo"
-       ami64:"ami-ab15f6c2"
-       user_data:""
-       security_group:"sumo"
-       instance_size:"m1.small"
-
-Set config vars before launch:
-
-    $ sumo set mybox --instance-size c1.medium
-
-Create a static IP address and/or volumes:
-
-    $ sumo attach_ip mybox
-    $ sumo attach_volume mbox 50 /dev/sdh1
-
-Launch an instance of the server:
-
-    $ sumo launch mybox
-    ---> Launch server mybox...
-
-You may want to spin down the server if it's not in use:
-
-    $ sumo stop mybox
-
-...and bring it up again later:
-
-    $ sumo start mybox
-
-== Some details you might want to know
-
-Sumo creates its own keypair named sumo, which is stored in ~/.ssh/keypair.pem.  Amazon doesn't let you upload your own ssh public key, which is lame, so this is the best option for making the launch-and-connect process a single step.
-
-It will also create an Amazon security group called sumo, so that it can lower the firewall for services you configure via cookbook roles.
+= Judo
 
 == Meta
 
@@ -86,5 +8,5 @@ Patches contributed by Blake Mizerany, Jesse Newland, Gert Goet, and Tim Lossen
 
 Released under the MIT License: http://www.opensource.org/licenses/mit-license.php
 
-http://github.com/adamwiggins/sumo
+http://github.com/orionz/judo
 

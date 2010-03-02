@@ -1,19 +1,20 @@
 require 'jeweler'
 
 Jeweler::Tasks.new do |s|
-	s.name = "sumo"
+	s.name = "judo"
 	s.description = "A no-hassle way to launch one-off EC2 instances from the command line"
 	s.summary = s.description
-	s.author = "Adam Wiggins"
-	s.email = "adam@heroku.com"
-	s.homepage = "http://github.com/adamwiggins/sumo"
-	s.rubyforge_project = "sumo"
+	s.author = "Orion Henry"
+	s.email = "orion@heroku.com"
+	s.homepage = "http://github.com/orionz/judo"
+	s.rubyforge_project = "judo"
 	s.files = FileList["[A-Z]*", "{bin,lib,spec}/**/*"]
-	s.executables = %w(sumo)
+	s.executables = %w(judo)
 	s.add_dependency "uuidtools"
 	s.add_dependency "aws"
 	s.add_dependency "thor"
 	s.add_dependency "json"
+	s.add_dependency "fog"
 end
 
 Jeweler::RubyforgeTasks.new
