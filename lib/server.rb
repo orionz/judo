@@ -1,20 +1,28 @@
 ### NEEDED for new gem launch
 
 ### 32 hrs to go - 12:00am Feb 26th - expected completion Mar 2
-### [ ] judo init (2 hrs)
-### [ ] implement real default config - remove special case code (3 hrs)
-### [ ] complete slug compile - load into s3 (4 hrs)
-### [ ] refactor availability_zone (2 hrs)
-### [ ] refactor keypair.pem setup (3 hrs)
-### [ ] implement auto security_group creation and setup (6 hrs)
-### [ ] version in the db - require upgrade of gem if db version ahead (1 hr)
-### [ ] write some examples - simple postgres/redis/couchdb server (5hrs)
+### [X] judo init (2 hrs)
+### [X] implement real default config - remove special case code (3 hrs)
+### [X] refactor keypair.pem setup (3 hrs)
+### [X] version in the db - require upgrade of gem if db version ahead (1 hr)
+### [X] implement multiple security groups (1 hr)
+### [-] complete slug compile - load into s3 (4 hrs)
+###     [X] compile and put in s3
+###     [X] attach and increment version number
+###     [X] list version number on "judo list"
+###     [ ] update kuzushi to pull down a compiled tar.gz
+###     [ ] error if version is blank
 ### [ ] two phase delete (1 hr)
+### [-] refactor availability_zone (2 hrs)
+###     [ ] pick availability zone from config "X":"Y" or  "X":["Y","Z"]
+###     [ ] assign to state on creation ( could delay till volume creation )
+### [ ] implement auto security_group creation and setup (6 hrs)
+### [ ] write some examples - simple postgres/redis/couchdb server (5hrs)
 ### [ ] write new README (4 hrs)
 ### [ ] realase new gem! (1 hr)
 
 ### [ ] user a logger service (1 hr)
-### [ ] write 4 simple specs (1 hr)
+### [ ] write specs (5 hr)
 
 ### Do Later
 ### [ ] use amazon's new conditional write tools so we never have problems from concurrent updates
@@ -95,6 +103,18 @@ module Judo
 
 		def elastic_ip
 			get "elastic_ip"
+		end
+
+		def version_desc
+			if version.to_i == group.version.to_i
+				"v#{version}"
+			else
+				"v#{version}/#{group.version}"
+			end
+		end
+
+		def version
+			get "version"
 		end
 
 		def virgin?
@@ -274,18 +294,22 @@ module Judo
 		end
 
 		def launch_ec2
-			validate
+#			validate
 
 			## EC2 launch_instances
 			result = Config.ec2.launch_instances(ami,
 				:instance_type => config["instance_size"],
 				:availability_zone => config["availability_zone"],
 				:key_name => config["key_name"],
-				:group_ids => [config["security_group"]],
+				:group_ids => security_groups,
 				:user_data => user_data).first
 
-			update "instance_id" => result[:aws_instance_id], "virgin" => false
+			update "instance_id" => result[:aws_instance_id], "virgin" => false, "version" => group.version
 #			remove "virgin"
+		end
+
+		def security_groups
+			[ config["security_group"] ].flatten
 		end
 
 		def console_output
@@ -439,7 +463,7 @@ USER_DATA
 		end
 
 		def url
-			"#{Judo::Config.couch_url}/#{group}"
+			group.s3_url
 		end
 
 		def validate

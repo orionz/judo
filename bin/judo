@@ -2,8 +2,6 @@
 
 require File.dirname(__FILE__) + '/../lib/all'
 
-#Judo::Config.connect
-
 require 'thor'
 
 class CLI < Thor
@@ -105,8 +103,9 @@ class CLI < Thor
 	desc "list [NAMES]", "list all servers"
 	def list(*names)
 		if group = Judo::Group.current
+			printf "  SERVER IN GROUP #{group.name}\n"
 			servers(*names) do |s|
-				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+				printf "%-18s %-4s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.version_desc, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
 			end
 		else
 			printf "  SERVER GROUPS\n"
@@ -134,7 +133,7 @@ class CLI < Thor
 
 	desc "init", "create a new judo repository in the current directory"
 	def init
-		Judo::Config.init
+		Judo::Setup.new.init
 	end
 
 	desc "volumes", "list all volumes"
@@ -165,8 +164,7 @@ class CLI < Thor
 
 	desc "commit", "push configs and files to couchdb"
 	def commit
-#		group = Judo::Config.group
-		Judo::Server.commit
+		Judo::Group.current.compile
   end
 
 	no_tasks do

@@ -2,12 +2,12 @@ module Judo
 	class Group
 		attr_accessor :name, :dir
 
-    def self.dirs
-      Dir["#{Judo::Config.repo_dir}/*/config.json"].map { |d| File.dirname(d) }
-    end
+		def self.dirs
+			Dir["#{Judo::Config.repo_dir}/*/config.json"].map { |d| File.dirname(d) }
+		end
 
 		def self.all
-			@@all ||= (dirs.map { |d| new(d) } << Group.new(Judo::Config.judo_dir, "default"))
+			@@all ||= (dirs.map { |d| new(d) })
 		end
 
 		def self.find(name)
@@ -18,9 +18,9 @@ module Judo
 			find(name)
 		end
 
-    def self.current
-      all.detect { |d| Dir.pwd == d.dir or Dir.pwd =~ /^#{d.dir}\// } || find("default")
-    end
+		def self.current
+			all.detect { |d| Dir.pwd == d.dir or Dir.pwd =~ /^#{d.dir}\// }
+		end
 
 		def initialize(dir, name = File.basename(dir))
 			@name = name
@@ -28,13 +28,13 @@ module Judo
 		end
 
 		def create_server(server_name)
-      abort("Server needs a name") if server_name.nil?
-#     abort("Already a server named #{server_name}") if Judo::Server.find_by_name(attrs[:name])  ## FIXME
-#     Judo::Config.read_config(attrs[:group]) ## make sure the config is valid  ## FIXME
+			abort("Server needs a name") if server_name.nil?
+#			abort("Already a server named #{server_name}") if Judo::Server.find_by_name(attrs[:name])  ## FIXME
+#			Judo::Config.read_config(attrs[:group]) ## make sure the config is valid  ## FIXME
 
-      server = Judo::Server.new server_name, self
-      server.task("Creating server #{server_name}") do
-      	server.update "name" => server_name, "group" => name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36)
+			server = Judo::Server.new server_name, self
+			server.task("Creating server #{server_name}") do
+				server.update "name" => server_name, "group" => name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36)
 				Judo::Config.sdb.put_attributes("judo_config", "groups", name => server_name)
 			end
 			server
@@ -45,15 +45,27 @@ module Judo
 		end
 	
 		def server_names
-			Judo::Config.sdb.get_attributes("judo_config", "groups", @name)[:attributes][@name] || []
+			Judo::Config.sdb.get_attributes("judo_config", "groups")[:attributes][@name] || []
 		end
 
 		def servers
 			server_names.map { |n| Judo::Server.new(n, self) }
 		end
 
+		def version
+			@version ||= (Judo::Config.sdb.get_attributes("judo_config", "group_versions")[:attributes][@name] || ["0"]).first.to_i
+			@version ||= (Judo::Config.sdb.get_attributes("judo_config", "group_versions")[:attributes][@name] || ["0"]).first.to_i
+		end
+
+		def set_version(new_version)
+			@version = new_version
+			Judo::Config.sdb.put_attributes("judo_config", "group_versions", { name => new_version }, :replace)
+		end
+
 		def compile
 			tmpdir = "/tmp/kuzushi/#{name}"
+			set_version(version + 1)
+			puts "Compiling version #{version}"
 			FileUtils.rm_rf(tmpdir)
 			FileUtils.mkdir_p(tmpdir)
 			Dir.chdir(tmpdir) do |d|
@@ -71,7 +83,7 @@ module Judo
 		end
 
 		def tar_file
-			"#{name}.tar.gz"
+			"#{name}.#{version}.tar.gz"  ## FIXME needs to incorprate #{config version} "#{name}.#{version}.tar.gz"
 		end
 
 		def s3_url 
@@ -88,7 +100,7 @@ module Judo
 
 		def extract_file(type, name, files)
 			path = "#{dir}/#{type}s/#{name}"
-      found = Dir[path]
+			found = Dir[path]
 			if not found.empty?
 				found.each { |f| files["#{type}s/#{File.basename(f)}"] = f }
 			elsif parent
@@ -128,30 +140,25 @@ module Judo
 		end
 
 		def self.load_all(group, configs = [])
-      return configs.reverse.inject(Judo::Config.defaults) { |sum,conf| sum.merge(conf) } unless group
+			return configs.reverse.inject({}) { |sum,conf| sum.merge(conf) } unless group
 			raw_config = group.read_config
 			load_all(find(raw_config["import"]), configs << raw_config)
 		end
 
 		def config_file
-				return "#{dir}/defaults.json" if name == "default"
-        "#{dir}/config.json"
+			"#{dir}/config.json"
 		end
 
-    def read_config
-      begin
-        JSON.parse(File.read(config_file))
-      rescue Errno::ENOENT
-        {}
-      end
-    end
+		def read_config
+			begin
+				JSON.parse(File.read(config_file))
+			rescue Errno::ENOENT
+				{}
+			end
+		end
 
 		def delete_server(server)
 			sdb.delete_attributes("judo_config", "groups", name => server.name)
-		end
-
-		def default?
-			false
 		end
 
 		def to_s

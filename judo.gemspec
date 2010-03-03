@@ -5,13 +5,13 @@
 
 Gem::Specification.new do |s|
   s.name = %q{judo}
-  s.version = "0.0.1"
+  s.version = "0.0.2"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Orion Henry"]
   s.date = %q{2010-03-02}
   s.default_executable = %q{judo}
-  s.description = %q{A no-hassle way to launch one-off EC2 instances from the command line}
+  s.description = %q{The gentile way to manage and control ec2 instances}
   s.email = %q{orion@heroku.com}
   s.executables = ["judo"]
   s.extra_rdoc_files = [
@@ -26,6 +26,7 @@ Gem::Specification.new do |s|
      "lib/config.rb",
      "lib/group.rb",
      "lib/server.rb",
+     "lib/setup.rb",
      "spec/base.rb",
      "spec/server_spec.rb"
   ]
@@ -33,8 +34,8 @@ Gem::Specification.new do |s|
   s.rdoc_options = ["--charset=UTF-8"]
   s.require_paths = ["lib"]
   s.rubyforge_project = %q{judo}
-  s.rubygems_version = %q{1.3.5}
-  s.summary = %q{A no-hassle way to launch one-off EC2 instances from the command line}
+  s.rubygems_version = %q{1.3.6}
+  s.summary = %q{The gentile way to manage and control ec2 instances}
   s.test_files = [
     "spec/base.rb",
      "spec/server_spec.rb"
@@ -49,17 +50,20 @@ Gem::Specification.new do |s|
       s.add_runtime_dependency(%q<aws>, [">= 0"])
       s.add_runtime_dependency(%q<thor>, [">= 0"])
       s.add_runtime_dependency(%q<json>, [">= 0"])
+      s.add_runtime_dependency(%q<fog>, [">= 0"])
     else
       s.add_dependency(%q<uuidtools>, [">= 0"])
       s.add_dependency(%q<aws>, [">= 0"])
       s.add_dependency(%q<thor>, [">= 0"])
       s.add_dependency(%q<json>, [">= 0"])
+      s.add_dependency(%q<fog>, [">= 0"])
     end
   else
     s.add_dependency(%q<uuidtools>, [">= 0"])
     s.add_dependency(%q<aws>, [">= 0"])
     s.add_dependency(%q<thor>, [">= 0"])
     s.add_dependency(%q<json>, [">= 0"])
+    s.add_dependency(%q<fog>, [">= 0"])
   end
 end
 

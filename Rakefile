@@ -2,7 +2,7 @@ require 'jeweler'
 
 Jeweler::Tasks.new do |s|
 	s.name = "judo"
-	s.description = "A no-hassle way to launch one-off EC2 instances from the command line"
+	s.description = "The gentile way to manage and control ec2 instances"
 	s.summary = s.description
 	s.author = "Orion Henry"
 	s.email = "orion@heroku.com"
