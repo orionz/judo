@@ -5,13 +5,13 @@
 
 Gem::Specification.new do |s|
   s.name = %q{judo}
-  s.version = "0.0.3"
+  s.version = "0.0.4"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Orion Henry"]
   s.date = %q{2010-03-11}
   s.default_executable = %q{judo}
-  s.description = %q{The gentile way to manage and control ec2 instances}
+  s.description = %q{The gentle way to manage and control ec2 instances}
   s.email = %q{orion@heroku.com}
   s.executables = ["judo"]
   s.extra_rdoc_files = [
@@ -35,7 +35,7 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
   s.rubyforge_project = %q{judo}
   s.rubygems_version = %q{1.3.6}
-  s.summary = %q{The gentile way to manage and control ec2 instances}
+  s.summary = %q{The gentle way to manage and control ec2 instances}
   s.test_files = [
     "spec/base.rb",
      "spec/server_spec.rb"
