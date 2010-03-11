@@ -15,7 +15,7 @@ module Judo
 		end
 
 		def check_version
-			fail "judo db is newer than the current gem - upgrade judo and try again" if get_db_version > db_version
+			abort "judo db is newer than the current gem - upgrade judo and try again" if get_db_version > db_version
 		end
 
 		def repo_dir
@@ -77,13 +77,12 @@ module Judo
 		end
 
 		def get_sdb(aws_id, aws_key)
-			puts "GET SDB #{aws_id} #{aws_key}"
 			Aws::SdbInterface.new(aws_id, aws_key, :logger => Logger.new(nil))
 		end
 
 		def sdb
 			@sdb ||= get_sdb(access_id, access_secret)
-			@version_ok ||= check_version
+#			@version_ok ||= check_version
 			@sdb
 		end
 
@@ -92,7 +91,7 @@ module Judo
 		end
 
 		def s3_url(k)
-			s3.get_object_url(judo_config["s3_bucket"], k,Time.now.to_i + 100_000_000)
+			s3.get_object_url(judo_config["s3_bucket"], k, Time.now.to_i + 100_000_000)
 		end
 
 		def s3_put(k, file)

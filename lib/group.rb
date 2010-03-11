@@ -54,7 +54,6 @@ module Judo
 
 		def version
 			@version ||= (Judo::Config.sdb.get_attributes("judo_config", "group_versions")[:attributes][@name] || ["0"]).first.to_i
-			@version ||= (Judo::Config.sdb.get_attributes("judo_config", "group_versions")[:attributes][@name] || ["0"]).first.to_i
 		end
 
 		def set_version(new_version)
@@ -132,7 +131,7 @@ module Judo
 		end
 
 		def keypair_file
-			(attachments.select { |a| File.basename(config["keypair"]) }) || fail("no keypair_file specified")
+			extract_file(:keypair, config["key_name"] + ".pem" , {}).first
 		end
 
 		def attachments

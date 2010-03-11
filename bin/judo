@@ -12,6 +12,13 @@ class CLI < Thor
 		end
 	end
 
+	desc "dump", "start one or more servers"
+	def dump
+		require 'pp'
+      pp Judo::Config.sdb.select("SELECT * FROM judo_servers")[:items]
+      pp Judo::Config.sdb.select("SELECT * FROM judo_config")[:items]
+	end
+
 	desc "ssh [NAMES]", "ssh to a specified server or first available"
 	def ssh(*names)
 		servers(*names) do |server|
@@ -123,11 +130,7 @@ class CLI < Thor
 	desc "console [NAMES]", "get console output for server or first available"
 	def console(*names)
 		servers(*names) do |server|
-			if server.running?
-				puts "Not running: #{server.name}"
-			else
-				puts server.console_output if server.running?
-			end
+			puts server.console_output
 		end
 	end
 

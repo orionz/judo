@@ -10,8 +10,8 @@
 ###     [X] compile and put in s3
 ###     [X] attach and increment version number
 ###     [X] list version number on "judo list"
-###     [ ] update kuzushi to pull down a compiled tar.gz
-###     [ ] error if version is blank
+###     [X] update kuzushi to pull down a compiled tar.gz
+###     [X] error if version is blank
 ### [ ] two phase delete (1 hr)
 ### [-] refactor availability_zone (2 hrs)
 ###     [ ] pick availability zone from config "X":"Y" or  "X":["Y","Z"]
@@ -23,6 +23,10 @@
 
 ### [ ] user a logger service (1 hr)
 ### [ ] write specs (5 hr)
+
+### Error Handling
+### [ ] no availability zone before making disks
+### [ ] security group does not exists
 
 ### Do Later
 ### [ ] use amazon's new conditional write tools so we never have problems from concurrent updates
@@ -60,14 +64,18 @@ module Judo
 					name = item["name"] || "missing_#{rand(2**32).to_s(36)}"
 					group = (item["group"] || "default")
 					data = {
-						"group" => (item["group"] || "default" ), "name" => name,
-						"secret" => item["secret"], "elastic_ip" => item["elastic_ip"],
-						"volumes" => (item["volumes_flat"] || JSON.parse(item["volumes_json"] || "[]").map { |k,v| "#{k}:#{v}" }),
-						"instance_id" => item["instance_id"], "virgin" => item["virgin"]
+						"group"      => (item["group"] || "default" ),
+						"name"       => name,
+						"secret"     => item["secret"],
+						"elastic_ip" => item["elastic_ip"],
+						"volumes"    => (item["volumes_flat"] || JSON.parse(item["volumes_json"] || "[]").map { |k,v| "#{k}:#{v}" }),
+						"instance_id" => item["instance_id"],
+						"virgin"     => (item["virgin"] == ["true"])
 					}.delete_if { |k,v| v == [] or v == nil or v == [nil] }
 					pp data
 					Judo::Config.sdb.put_attributes("judo_servers", name, data, :replace)
 					Judo::Config.sdb.put_attributes("judo_config", "groups", group => name)
+					Judo::Config.sdb.put_attributes("judo_config", "judo", "dbversion" => "1")
 				end
 			end
 			"ok"
@@ -106,7 +114,8 @@ module Judo
 		end
 
 		def version_desc
-			if version.to_i == group.version.to_i
+			return "" unless running?
+			if version == group.version
 				"v#{version}"
 			else
 				"v#{version}/#{group.version}"
@@ -114,7 +123,7 @@ module Judo
 		end
 
 		def version
-			get "version"
+			get("version").to_i
 		end
 
 		def virgin?
@@ -192,7 +201,7 @@ module Judo
 			begin
 				if config["elastic_ip"] and not elastic_ip
 					### EC2 allocate_address
-					task("Adding an elastic ip") do 
+					task("Adding an elastic ip") do
 						ip = Judo::Config.ec2.allocate_address
 						add_ip(ip)
 					end
@@ -265,6 +274,7 @@ module Judo
 
 		def start
 			abort "Already running" if running?
+			abort "No config has been commited yet, type 'judo commit'" unless group.version > 0
 			task("Starting server #{name}")      { launch_ec2 }
 			task("Acquire hostname")             { wait_for_hostname }
 			task("Wait for ssh")                 { wait_for_ssh }
@@ -290,7 +300,7 @@ module Judo
 			## EC2 terminate_isntaces
 			task("Terminating instance") { Config.ec2.terminate_instances([ instance_id ]) }
 			task("Wait for volumes to detach") { wait_for_volumes_detached } if volumes.size > 0
-			remove "instance_id" 
+			remove "instance_id"
 		end
 
 		def launch_ec2
@@ -305,7 +315,6 @@ module Judo
 				:user_data => user_data).first
 
 			update "instance_id" => result[:aws_instance_id], "virgin" => false, "version" => group.version
-#			remove "virgin"
 		end
 
 		def security_groups
@@ -313,7 +322,7 @@ module Judo
 		end
 
 		def console_output
-			### EC2 get_console_output
+			abort "not running" unless running?
 			Config.ec2.get_console_output(instance_id)[:aws_output]
 		end
 
@@ -458,12 +467,13 @@ apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
 gem install kuzushi --no-rdoc --no-ri
 GEM_BIN=`ruby -r rubygems -e "puts Gem.bindir"`
-$GEM_BIN/kuzushi #{virgin? && "init" || "start"} #{url}
+echo "$GEM_BIN/kuzushi #{virgin? && "init" || "start"} '#{url}'" > /var/log/kuzushi.log
+$GEM_BIN/kuzushi #{virgin? && "init" || "start"} '#{url}' >> /var/log/kuzushi.log 2>&1
 USER_DATA
 		end
 
 		def url
-			group.s3_url
+			@url ||= group.s3_url
 		end
 
 		def validate

@@ -27,14 +27,9 @@ DEFAULT
 			input.empty? and default or input 
 		end
 
-		def failure(msg)
-			puts msg
-			exit 1
-		end
-
 		def check_setup
-			failure "you are already inside a judo repository" if Judo::Config.find_judo_dir(Dir.pwd)
-			failure "./.git not found - judo configurations must be kept in a git repo.  type 'git init' to setup the git repo." unless File.exists? "./.git"
+			abort "you are already inside a judo repository" if Judo::Config.find_judo_dir(Dir.pwd)
+			abort "./.git not found - judo configurations must be kept in a git repo.  type 'git init' to setup the git repo." unless File.exists? "./.git"
 		end
 
 		def init
@@ -71,7 +66,7 @@ DEFAULT
 			sdb.create_domain("judo_servers")
 			sdb.create_domain("judo_config")
       olddb = sdb.get_attributes("judo_config", "judo")[:attributes]["dbversion"]
-			failure "There is an existing judo database of a newer version - upgrade judo and try again" if olddb and olddb.first.to_i > Judo::Config.db_version
+			abort "There is an existing judo database of a newer version - upgrade judo and try again" if olddb and olddb.first.to_i > Judo::Config.db_version
 			sdb.put_attributes("judo_config", "judo", { "dbversion" => Judo::Config.db_version }, :replace)
 		end
 
