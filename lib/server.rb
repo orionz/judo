@@ -50,37 +50,6 @@ module Judo
 			@group = group
 		end
 
-### Getting things in and out of SimpleDB - would be nice if it were a plugin so we could use another store if need db (couchdb/mongo/sql)
-
-		def self.migrate
-			require 'pp'
-			x = {}
-			Judo::Config.sdb.delete_domain("judo_servers")
-			Judo::Config.sdb.create_domain("judo_servers")
-			Judo::Config.sdb.delete_domain("judo_config")
-			Judo::Config.sdb.create_domain("judo_config")
-			Judo::Config.sdb.select("SELECT * FROM sumo_server").items.each do |chunk|
-				chunk.each do |uid,item|
-					name = item["name"] || "missing_#{rand(2**32).to_s(36)}"
-					group = (item["group"] || "default")
-					data = {
-						"group"      => (item["group"] || "default" ),
-						"name"       => name,
-						"secret"     => item["secret"],
-						"elastic_ip" => item["elastic_ip"],
-						"volumes"    => (item["volumes_flat"] || JSON.parse(item["volumes_json"] || "[]").map { |k,v| "#{k}:#{v}" }),
-						"instance_id" => item["instance_id"],
-						"virgin"     => (item["virgin"] == ["true"])
-					}.delete_if { |k,v| v == [] or v == nil or v == [nil] }
-					pp data
-					Judo::Config.sdb.put_attributes("judo_servers", name, data, :replace)
-					Judo::Config.sdb.put_attributes("judo_config", "groups", group => name)
-					Judo::Config.sdb.put_attributes("judo_config", "judo", "dbversion" => "1")
-				end
-			end
-			"ok"
-		end
-
 		def domain
 			"judo_servers"
 		end
