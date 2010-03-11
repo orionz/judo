@@ -391,6 +391,7 @@ module Judo
 
 		def connect_ssh
 			abort "not running" unless running?
+			system "chmod 600 #{group.keypair_file}"
 			system "ssh -i #{group.keypair_file} #{config["user"]}@#{hostname}"
 		end
 		

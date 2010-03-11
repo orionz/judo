@@ -87,15 +87,19 @@ module Judo
 		end
 
 		def s3
-      @s3 ||= Fog::AWS::S3.new( :aws_access_key_id => access_id, :aws_secret_access_key => access_secret)
+			@s3 ||= Aws::S3.new(access_id, access_secret, :logger => Logger.new(nil))
+		end
+
+		def s3_bucket
+			@s3_bucket ||= s3.bucket(judo_config["s3_bucket"])
 		end
 
 		def s3_url(k)
-			s3.get_object_url(judo_config["s3_bucket"], k, Time.now.to_i + 100_000_000)
+			Aws::S3Generator::Key.new(s3_bucket, k).get
 		end
 
 		def s3_put(k, file)
-			s3.put_object(judo_config["s3_bucket"], k, file)
+			s3_bucket.put(k, file)
 		end
 	end
 end
