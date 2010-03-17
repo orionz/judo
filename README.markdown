@@ -185,42 +185,42 @@ A couchdb server:
 ### ./couchdb/config.json
 
     {
-    // dont repeat yourself - import the basic config
-    "import" : "default",
-    // its a db so we're going to want to have a static ip
-    "elastic_ip" : true,
-    // only need 1 package
-    "packages" : "couchdb",
-    "volumes" : { "device" : "/dev/sde1",
-                  "media"  : "ebs",
-                  "size"   : 64,
-                  "format" : "ext3",
-                  // this is where couchdb looks for its data by default
-                  "mount"  : "/var/lib/couchdb/0.10.0",
-                  // make sure the data is owned by the couchdb user
-                  "user"   : "couchdb",
-                  "group"  : "couchdb",
-                  // bounce couch since the data dir changed
-                  "after"  : "#!/bin/bash\n service couchdb restart\n" }
+        // dont repeat yourself - import the basic config
+        "import" : "default",
+        // its a db so we're going to want to have a static ip
+        "elastic_ip" : true,
+        // only need 1 package
+        "packages" : "couchdb",
+        "volumes" : { "device" : "/dev/sde1",
+                      "media"  : "ebs",
+                      "size"   : 64,
+                      "format" : "ext3",
+                      // this is where couchdb looks for its data by default
+                      "mount"  : "/var/lib/couchdb/0.10.0",
+                      // make sure the data is owned by the couchdb user
+                      "user"   : "couchdb",
+                      "group"  : "couchdb",
+                      // bounce couch since the data dir changed
+                      "after"  : "#!/bin/bash\n service couchdb restart\n" }
     }
 
 A memcached server:
 
 ### ./memcache/config.json
     {
-    // dont repeat yourself - import the basic config
-    "import" : "default",
-    // its a data store so we're going to want to have a static ip
-    "elastic_ip" : true,
-    // only need 1 package
-    "packages" : "memcached",
-    "instance_size" : "m1.xlarge",
-    "files" : [
-      { "file"     : "/etc/memcached.conf",
-        "template" : "memcached.conf.erb" },
-      { "file"     : "/etc/default/memcached",
-        "source"   : "memcached-default" },
-    "after" : "#!/bin/bash\n service memcached start\n"
+        // dont repeat yourself - import the basic config
+        "import" : "default",
+        // its a data store so we're going to want to have a static ip
+        "elastic_ip" : true,
+        // only need 1 package
+        "packages" : "memcached",
+        "instance_size" : "m1.xlarge",
+        "files" : [
+          { "file"     : "/etc/memcached.conf",
+            "template" : "memcached.conf.erb" },
+          { "file"     : "/etc/default/memcached",
+            "source"   : "memcached-default" },
+        "after" : "#!/bin/bash\n service memcached start\n"
     }
 
 ### ./memcache/files/memcached-default
@@ -242,27 +242,27 @@ A redis server with a 2 disk xfs raid 0:
 ### ./redis/config.json
 
     {
-    // dont repeat yourself - import the basic config
-    "import" : "default",
-    "elastic_ip" : true,
-    "instance_size" : "m2.xlarge",
-    "local_packages" : { "package" : "redis-server_1.2.5-1", "source" : "http://http.us.debian.org/debian/pool/main/r/redis/" },
-    "volumes" : [{ "device" : "/dev/sde1",
-                   "media"  : "ebs",
-                   "scheduler" : "deadline",
-                   "size"   : 16 },
-                 { "device" : "/dev/sde2",
-                   "media"  : "ebs",
-                   "scheduler" : "deadline",
-                   "size"   : 16 },
-                 { "device"    : "/dev/md0",
-                  "media"     : "raid",
-                  "mount"     : "/var/lib/redis",
-                  "drives"    : [ "/dev/sde1", "/dev/sde2" ],
-                  "user"      : "redis",
-                  "group"     : "redis",
-                  "level"     : 0,
-                  "format"    : "xfs" }]
+        // dont repeat yourself - import the basic config
+        "import" : "default",
+        "elastic_ip" : true,
+        "instance_size" : "m2.xlarge",
+        "local_packages" : { "package" : "redis-server_1.2.5-1", "source" : "http://http.us.debian.org/debian/pool/main/r/redis/" },
+        "volumes" : [{ "device" : "/dev/sde1",
+                       "media"  : "ebs",
+                       "scheduler" : "deadline",
+                       "size"   : 16 },
+                     { "device" : "/dev/sde2",
+                       "media"  : "ebs",
+                       "scheduler" : "deadline",
+                       "size"   : 16 },
+                     { "device"    : "/dev/md0",
+                      "media"     : "raid",
+                      "mount"     : "/var/lib/redis",
+                      "drives"    : [ "/dev/sde1", "/dev/sde2" ],
+                      "user"      : "redis",
+                      "group"     : "redis",
+                      "level"     : 0,
+                      "format"    : "xfs" }]
     }
 
 ## CONFIG - LAUNCHING THE SERVER
