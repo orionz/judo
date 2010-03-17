@@ -233,17 +233,21 @@ A memcached server:
 ===
 
 === ./memcache/files/memcached-default
+
 # Set this to yes to enable memcached.
 ENABLE_MEMCACHED=yes
+
 ===
 
 === ./memcache/templates/memcached.conf.erb
+
 -d
 logfile /var/log/memcached.log
 ## ohai gives memory in Kb so div by 1024 to get megs
 ## use 75% of total ram (* 0.75)
 -m <%= (@system.memory["total"].to_i / 1024 * 0.75).to_i %>
 -u nobody
+
 ===
 
 A redis server with a 2 disk xfs raid 0:
