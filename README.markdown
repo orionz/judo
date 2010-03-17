@@ -1,4 +1,4 @@
-### Judo
+# Judo
 
 Judo is a tool for managing a cloud of ec2 servers.  It aims to be both simple
 to get going and powerful.
@@ -182,7 +182,7 @@ An example is worth a thousand words.
 
 A couchdb server:
 
-# ./couchdb/config.json
+### ./couchdb/config.json
 
     {
     // dont repeat yourself - import the basic config
@@ -206,7 +206,7 @@ A couchdb server:
 
 A memcached server:
 
-# ./memcache/config.json
+### ./memcache/config.json
     {
     // dont repeat yourself - import the basic config
     "import" : "default",
@@ -223,12 +223,12 @@ A memcached server:
     "after" : "#!/bin/bash\n service memcached start\n"
     }
 
-# ./memcache/files/memcached-default
+### ./memcache/files/memcached-default
 
     # Set this to yes to enable memcached.
     ENABLE_MEMCACHED=yes
 
-# ./memcache/templates/memcached.conf.erb
+### ./memcache/templates/memcached.conf.erb
 
     -d
     logfile /var/log/memcached.log
@@ -239,7 +239,7 @@ A memcached server:
 
 A redis server with a 2 disk xfs raid 0:
 
-# ./redis/config.json
+### ./redis/config.json
 
     {
     // dont repeat yourself - import the basic config
