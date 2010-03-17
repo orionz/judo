@@ -71,13 +71,17 @@ DEFAULT
 		end
 
 		def setup_default_security_group
-			ec2.create_security_group('judo', 'Judo')
-			ec2.authorize_security_group_IP_ingress("judo", 22, 22,'tcp','0.0.0.0/0')
+			begin
+				ec2.create_security_group('judo', 'Judo')
+				ec2.authorize_security_group_IP_ingress("judo", 22, 22,'tcp','0.0.0.0/0')
+			rescue Aws::AwsError => e
+				raise unless e.message =~ /InvalidGroup.Duplicate/
+			end
 		end
 
 		def setup_bucket
 			puts "setting up an s3 bucket"
-   		Fog::AWS::S3.new(:aws_access_key_id => @aws_access_id, :aws_secret_access_key => @aws_secret_key).put_bucket(@s3_bucket)
+			Aws::S3.new(@aws_access_id, @aws_secret_key, :logger => Logger.new(nil)).bucket(@s3_bucket, true)
 		end
 
 		def setup_default_server_group

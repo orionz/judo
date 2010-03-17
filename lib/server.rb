@@ -1,6 +1,5 @@
 ### NEEDED for new gem launch
 
-### 32 hrs to go - 12:00am Feb 26th - expected completion Mar 2
 ### [X] judo init (2 hrs)
 ### [X] implement real default config - remove special case code (3 hrs)
 ### [X] refactor keypair.pem setup (3 hrs)
@@ -19,6 +18,7 @@
 ### [ ] implement auto security_group creation and setup (6 hrs)
 ### [ ] write some examples - simple postgres/redis/couchdb server (5hrs)
 ### [ ] write new README (4 hrs)
+### [ ] bind kuzushi gem version version
 ### [ ] realase new gem! (1 hr)
 
 ### [ ] user a logger service (1 hr)
@@ -51,6 +51,10 @@ module Judo
 		end
 
 		def domain
+			self.class.domain
+		end
+
+		def self.domain
 			"judo_servers"
 		end
 
@@ -60,6 +64,20 @@ module Judo
 
 		def fetch_state
 			Judo::Config.sdb.get_attributes(domain, name)[:attributes]
+		end
+
+		def self.fetch_all
+			@@state = {}
+			Judo::Config.sdb.select("select * from #{domain}")[:items].each do |group|
+				group.each do |key,val| 
+					@@state[key] = val
+				end
+			end
+			@@state.map { |k,v| Server.new(k,v["group"].first) }
+		end
+
+		def self.all
+			@@all ||= fetch_all
 		end
 
 		def super_state
@@ -148,7 +166,7 @@ module Judo
 
 		def allocate_resources
 			if config["volumes"]
-				config["volumes"].each do |volume_config|
+				[config["volumes"]].flatten.each do |volume_config|
 					device = volume_config["device"]
 					if volume_config["media"] == "ebs"
 						size = volume_config["size"]
@@ -276,14 +294,21 @@ module Judo
 #			validate
 
 			## EC2 launch_instances
+			ud = user_data
+			debug(ud)
 			result = Config.ec2.launch_instances(ami,
 				:instance_type => config["instance_size"],
 				:availability_zone => config["availability_zone"],
 				:key_name => config["key_name"],
 				:group_ids => security_groups,
-				:user_data => user_data).first
+				:user_data => ud).first
 
 			update "instance_id" => result[:aws_instance_id], "virgin" => false, "version" => group.version
+		end
+
+		def debug(str)
+			return unless ENV['JUDO_DEBUG'] == "1"
+			puts "<JUDO_DEBUG>#{str}</JUDO_DEBUG>"
 		end
 
 		def security_groups

@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Orion Henry"]
-  s.date = %q{2010-03-11}
+  s.date = %q{2010-03-17}
   s.default_executable = %q{judo}
   s.description = %q{The gentle way to manage and control ec2 instances}
   s.email = %q{orion@heroku.com}
@@ -46,18 +46,15 @@ Gem::Specification.new do |s|
     s.specification_version = 3
 
     if Gem::Version.new(Gem::RubyGemsVersion) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<uuidtools>, [">= 0"])
       s.add_runtime_dependency(%q<aws>, [">= 0"])
       s.add_runtime_dependency(%q<thor>, [">= 0"])
       s.add_runtime_dependency(%q<json>, [">= 0"])
     else
-      s.add_dependency(%q<uuidtools>, [">= 0"])
       s.add_dependency(%q<aws>, [">= 0"])
       s.add_dependency(%q<thor>, [">= 0"])
       s.add_dependency(%q<json>, [">= 0"])
     end
   else
-    s.add_dependency(%q<uuidtools>, [">= 0"])
     s.add_dependency(%q<aws>, [">= 0"])
     s.add_dependency(%q<thor>, [">= 0"])
     s.add_dependency(%q<json>, [">= 0"])

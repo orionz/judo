@@ -201,11 +201,11 @@ class CLI < Thor
 		end
 
 		def ip_to_judo(ip)
-			Judo::Server.all.detect { |s| s.state["elastic_ip"] == ip }
+			Judo::Server.all.detect { |s| s.elastic_ip == ip }
 		end
 
 		def instance_id_to_judo(instance_id)
-			Judo::Server.all.detect { |s| s.state["instance_id"] and s.state["instance_id"] == instance_id }
+			Judo::Server.all.detect { |s| s.instance_id and s.instance_id == instance_id }
 		end
 	end
 end

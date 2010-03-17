@@ -70,7 +70,13 @@ module Judo
 			Dir.chdir(tmpdir) do |d|
 				attachments.each do |to,from|
 					FileUtils.mkdir_p(File.dirname(to))
-					FileUtils.cp(from,to)
+					if from =~ /^http:\/\//
+						puts "curl '#{from}'"
+						system "curl '#{from}' > #{to}"
+						puts "#{to} is #{File.stat(to).size} bytes"
+					else
+						FileUtils.cp(from,to)
+					end
 				end
 				File.open("config.json", "w") { |f| f.write(config.to_json) }
 				Dir.chdir("..") do
@@ -112,18 +118,25 @@ module Judo
 		def extract(config, files)
 			config.each do |key,value|
 				[value].flatten.each do |v|   ### cover "packages" : ["a","b"], "packages" : "a", "packages":[{ "file" : "foo.pkg"}]
-					extract(v, files) if v.is_a? Hash
-					case key
+					if v.is_a? Hash
+						extract(v, files) 
+					else
+						case key
 						when *[ "init", "before", "after" ]
 							extract_file(:script, v, files) unless v =~ /^#!/
+						when "package"
+							files["packages/#{v}_i386.deb"]  = "#{config["source"]}#{v}_i386.deb"
+							files["packages/#{v}_amd64.deb"] = "#{config["source"]}#{v}_amd64.deb"
 						when "local_packages"
-							extract_file(:package, "#{v}*", files)
+							extract_file(:package, "#{v}_i386.deb", files)
+							extract_file(:package, "#{v}_amd64.deb", files)
 						when "template"
 							extract_file(:template, v, files)
 						when "source"
-							extract_file(:file, v, files) unless config["template"]
+							extract_file(:file, v, files) unless config["template"] or config["package"]
 						when "file"
 							extract_file(:file, File.basename(v), files) unless config["template"] or config["source"]
+						end
 					end
 				end
 			end
