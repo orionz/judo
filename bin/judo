@@ -1,213 +1,107 @@
 #!/usr/bin/env ruby
 
-require File.dirname(__FILE__) + '/../lib/all'
+require 'optparse'
+require File.dirname(__FILE__) + '/../lib/judo'
+require File.dirname(__FILE__) + '/../lib/judo/commandline_helpers'
 
-require 'thor'
+include JudoCommandLineHelpers
 
-class CLI < Thor
-	desc "start [NAMES]", "start one or more servers"
-	def start(*names)
-		servers(*names) do |server|
-			server.start
-		end
-	end
+defaults = Judo::Base.default_options(Dir.pwd)
 
-	desc "dump", "start one or more servers"
-	def dump
-		require 'pp'
-      pp Judo::Config.sdb.select("SELECT * FROM judo_servers")[:items]
-      pp Judo::Config.sdb.select("SELECT * FROM judo_config")[:items]
-	end
+options = {}
 
-	desc "ssh [NAMES]", "ssh to a specified server or first available"
-	def ssh(*names)
-		servers(*names) do |server|
-			server.reload
-			server.wait_for_ssh
-			server.connect_ssh
-		end
-	end
+action = ARGV.shift
 
-	desc "launch NAME", "create and start a persistent server"
-	def launch(name)
-		create(name, true)
-	end
+ARGV.unshift "-h" unless action
 
-	desc "create NAME", "create a persistent server"
-	def create(name, start = false)
-		group = Judo::Group.current
-		if name =~ /^[+](\d*)/
-			n = $1.to_i
-			fail "woah nelly - that's too many - 5 or less pls" if n > 5
-			fail "woah nelly - that's not enough" if n < 1
-			top_counter = group.servers.map { |s| (s.name =~ /^#{s.group}.(\d*)$/); $1.to_i }.sort.last.to_i
-			n.times do |i|
-				top_counter += 1
-				server = group.create_server "#{group}.#{top_counter}"
-				server.allocate_resources
-				server.start if start
-			end
-		else
-			server = group.create_server name
-			server.allocate_resources
-			server.start if start
-		end
-	end
+optparse = OptionParser.new do|opts|
+  opts.banner = <<banner
+Usage: judo launch [options] SERVER ...
+       judo create [options] SERVER ...
+       judo destroy [options] SERVER ...
 
-	desc "restart NAME", "restart a running server"
-	def restart(*names)
-		servers(*names) do |server|
-			server.restart
-		end
-	end
+       # SERVER can be formatted as NAME or NAME:GROUP or +N or +N:GROUP
+       # where N is the number of servers to create or launch
+       # 'launch' only differs from 'create' in that it immediately starts the server
 
-	desc "stop [NAMES]", "stop a persistent server"
-	def stop(*names)
-		servers(*names) do |server|
-			server.stop
-			server.destroy if server.generic?
-		end
-	end
+       judo start [options] [SERVER ...]
+       judo stop [options] [SERVER ...]
+       judo restart [options] [SERVER ...]
 
-	desc "destroy NAMES", "destroy a persistent server"
-	def destroy(*names)
-		raise "Must specify names of servers to destroy" if names.empty?
-		servers(*names) do |server|
-			server.destroy
-		end
-	end
+       judo commit [options] GROUP
 
-	desc "info [NAMES]", "show server config"
-	def info(*names)
-		servers(*names) do |server|
-			require 'pp'
-			puts "#{server}"
-			if server.ec2_instance and not server.ec2_instance.empty?
-				puts "\t[ EC2 ]"
-				[:aws_instance_id, :ssh_key_name, :aws_availability_zone, :aws_state, :aws_image_id, :dns_name, :aws_instance_type, :private_dns_name, :aws_launch_time, :aws_groups ].each do |k|
-					printf "\t %-24s: %s\n",k, server.ec2_instance[k]
-				end
-			end
-			puts "\t[ VOLUMES ]"
-			server.ec2_volumes.each do |v|
-				printf "\t %-13s %-10s %-10s %4d  %-10s %-8s\n",
-				v[:aws_id],
-				v[:aws_status],
-				v[:zone],
-				v[:aws_size],
-				v[:aws_attachment_status],
-				v[:aws_device]
-			end
-#			pp ({ :name => server.name , :group => server.group, :volumes => server.volumes, :hostname => server.hostname })
-#			pp server.volumes.inspect
-#			puts server.state.inspect
-				## EC2 describe_volumes
-#				puts "	#{dev.to_s}:#{Judo::Config.ec2.describe_volumes([vol_id])}"
-#			end
-		end
-	end
+       judo info [options] [SERVER ...]
+       judo console [options] [SERVER ...] ## shows AWS console output
+       judo ssh [options] [SERVER ...]     ## ssh's into the server
 
-	desc "list [NAMES]", "list all servers"
-	def list(*names)
-		if group = Judo::Group.current
-			printf "  SERVER IN GROUP #{group.name}\n"
-			servers(*names) do |s|
-				printf "%-18s %-4s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.version_desc, s.state["instance_id"], s.instance_size, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
-			end
-		else
-			printf "  SERVER GROUPS\n"
-			Judo::Group.all.each do |g|
-				printf "%-18s %s servers\n", g.name, g.servers.size
-			end
-#			printf "  UNGROUPED SERVERS\n"
-#			servers.each do |s|
-#				printf "%-18s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.state["instance_id"], s.state["security_group"], s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
-#			end
-#		else
-		end
-	end
+       # SERVER can be formatted as NAME or NAME:GROUP
+       # or :GROUP to indicate the whole group.
+       # If no servers are listed all servers are assumed.
 
-	desc "console [NAMES]", "get console output for server or first available"
-	def console(*names)
-		servers(*names) do |server|
-			puts server.console_output
-		end
-	end
+       judo list [options]    ## lists all servers
+       judo groups [options]  ## lists all groups
 
-	desc "init", "create a new judo repository in the current directory"
-	def init
-		Judo::Setup.new.init
-	end
+       judo volumes [options] ## shows all EBS volumes and what they are attached to
+       judo ips [options]     ## shows all elastic ips and what they are attached to
 
-	desc "volumes", "list all volumes"
-	def volumes
-		format = "%13s %6s %12s  %-10s %-16s %-16s\n"
-		printf format, "AWS_ID", "SIZE", "AWS_STATUS", "AWS_DEVICE", "ATTACHED TO", "CONFIGURED FOR"
-		printf "%s\n", ("-" * 80)
-		### EC2 describe_volumes
-		Judo::Config.ec2.describe_volumes.map do |volume|
-			[ volume[:aws_id], volume[:aws_size], volume[:aws_status], volume[:aws_device] || "", instance_id_to_judo(volume[:aws_instance_id]) || volume[:aws_instance_id] || "", volume_id_to_judo(volume[:aws_id]) ]
-		end.sort { |a,b| [ a[5].to_s, a[3].to_s ] <=> [ b[5].to_s, b[3].to_s ] }.each do |d|
-			printf format, *d
-		end
-	end
+banner
 
-	desc "ips", "list all ips"
-	def ips
-		format = "%15s %20s %20s\n"
-		printf format, "IP", "ATTACHED TO", "CONFIGURED FOR"
-		printf "%s\n", ("-"*57)
-		## EC2 describe_addresses
-		Judo::Config.ec2.describe_addresses.map do |ip|
-			[ ip[:public_ip], instance_id_to_judo(ip[:instance_id]) || ip[:instance_id], ip_to_judo(ip[:public_ip]) ]
-		end.sort { |a,b| a[2].to_s <=> b[2].to_s }.each do |d|
-			printf format, *d
-		end
-	end
+  # start stop create destroy launch restart info console
+  # list volumes ips
 
-	desc "commit", "push configs and files to couchdb"
-	def commit
-		Judo::Group.current.compile
+  opts.on( '-c', '--config DIR', 'Specify the location of the config dir' ) do |dir|
+    defaults[:judo_dir] = dir
+    defaults.merge(Judo::Base.default_options(Dir.pwd, dir))
   end
-
-	no_tasks do
-		def servers(*names, &block)
-			group = Judo::Group.current
-			good_servers = group.servers.select { |s| names.empty? or names.include?(s.name) }
-			bad_names = (names - good_servers.map(&:name))
-			fail "bad server name: #{bad_names.join(', ')}" unless bad_names.empty?
-			good_servers.each do |server|
-				begin
-					block.call(server)
-				rescue Object => e
-					puts "Error on #{server.name}: #{e.message}"
-				end
-			end
-		end
-
-		def task(msg, &block)
-			printf "---> %-24s ", "#{msg}..."
-			start = Time.now
-			result = block.call || 'done'
-			result = "done" unless result.is_a? String
-			finish = Time.now
-			time = sprintf("%0.1f", finish - start)
-			puts "#{result} (#{time}s)"
-			result
-		end
-
-		def volume_id_to_judo(volume)
-			Judo::Server.all.detect { |s| s.volumes.invert[volume] }
-		end
-
-		def ip_to_judo(ip)
-			Judo::Server.all.detect { |s| s.elastic_ip == ip }
-		end
-
-		def instance_id_to_judo(instance_id)
-			Judo::Server.all.detect { |s| s.instance_id and s.instance_id == instance_id }
-		end
-	end
+  opts.on( '-r', '--repo DIR', 'Specify the location of the repo dir' ) do |dir|
+    options[:repo] = dir
+  end
+  opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|
+    options[:access_id] = id
+  end
+  opts.on( '-s', '--secret KEY', 'Specify the AWS access secret key' ) do |key|
+    options[:access_key] = key
+  end
+  opts.on( '-b', '--bucket BUCKET', 'Specify the AWS S3 bucket to use' ) do |bucket|
+    options[:bucket] = bucket
+  end
+  opts.on( '-g', '--group GROUP', 'Specify the default group of the repo dir' ) do |group|
+    options[:group] = group
+  end
+  opts.on( '-h', '--help', 'Display this screen' ) do
+    puts opts
+    exit
+  end
 end
 
-CLI.start
+optparse.parse!
+
+judo = Judo::Base.new(defaults.merge(options))
+
+begin
+  case action
+    when "ips" then do_ips(judo)
+    when "volumes" then do_volumes(judo)
+    when "list" then do_list(judo, ARGV)
+    when "groups" then do_groups(judo)
+    when "info" then find_servers(judo, ARGV)         { |s| do_info(judo, s) }
+    when "console" then find_servers(judo, ARGV)      { |s| puts server.console_output }
+    when "commit" then find_groups(judo, ARGV)        { |g| g.compile }
+    when "ssh" then find_servers(judo, ARGV)          { |s| s.connect_ssh }
+    when "start" then find_servers(judo, ARGV)        { |s| s.start }
+    when "restart" then find_servers(judo, ARGV)      { |s| s.restart }
+    when "stop" then find_servers(judo, ARGV)         { |s| s.stop }
+    when "create" then mk_servers(judo, ARGV)         { |s| s.create }
+    when "launch" then mk_servers(judo, ARGV)         { |s| s.create; s.start }
+    when "destroy" then
+      raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
+      find_either(judo, ARGV) do |i|
+        i.destroy
+      end
+    else
+      raise JudoError, "No such action #{action}"
+  end
+rescue JudoError => e
+  puts "Error: #{e.message}"
+  exit 1
+end

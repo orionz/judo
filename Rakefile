@@ -10,8 +10,7 @@ Jeweler::Tasks.new do |s|
 	s.rubyforge_project = "judo"
 	s.files = FileList["[A-Z]*", "{bin,lib,spec}/**/*"]
 	s.executables = %w(judo)
-	s.add_dependency "aws"
-	s.add_dependency "thor"
+	s.add_dependency "aws",  [">= 2.3.5"]
 	s.add_dependency "json"
 end
 
