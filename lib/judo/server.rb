@@ -1,5 +1,9 @@
 ### NEEDED for new gem launch
 
+### [ ] judo does not work with ruby 1.8.6 - :(
+### [ ] saw a timeout on volume allocation - make sure we build in re-tries - need to allocate the server all together as much as possible
+### [ ] there is a feature to allow for using that block_mapping feature - faster startup
+
 ### [ ] return right away.. (1 hr)
 ### [ ] two phase delete (1 hr)
 ### [-] refactor availability_zone (2 hrs)

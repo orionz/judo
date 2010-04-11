@@ -27,6 +27,7 @@ module Judo
       @base = base
       @name = name
       @version = version
+      puts "VERSION #{name} #{version} #{@version}"
 #      @dir = dir
     end
 
@@ -70,15 +71,14 @@ module Judo
        raise JudoError, "No config stored: try 'judo commit #{to_s}'"
     end
 
-    def set_version(new_version)
-      @version = new_version
-      @base.sdb.put_attributes("judo_config", "group_versions", { name => new_version }, :replace)
+    def set_version
+      @base.sdb.put_attributes("judo_config", "group_versions", { name => version }, :replace)
     end
 
     def compile
       tmpdir = "/tmp/kuzushi/#{name}"
-      set_version(version + 1)
       puts "Compiling #{self} version #{version}"
+      @version = @version + 1
       FileUtils.rm_rf(tmpdir)
       FileUtils.mkdir_p(tmpdir)
       new_config = build_config
@@ -101,6 +101,7 @@ module Judo
           @base.s3_put(version_config_file, new_config.to_json)
         end
       end
+      set_version
     end
 
     def version_config_file
