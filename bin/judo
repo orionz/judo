@@ -68,6 +68,9 @@ banner
   opts.on( '-g', '--group GROUP', 'Specify the default group of the repo dir' ) do |group|
     options[:group] = group
   end
+  opts.on( '-v', '--version VERSION', 'Update the servers config version on create/start/launch' ) do |version|
+    options[:version] = version
+  end
   opts.on( '-h', '--help', 'Display this screen' ) do
     puts opts
     exit
@@ -85,14 +88,14 @@ begin
     when "list" then do_list(judo, ARGV)
     when "groups" then do_groups(judo)
     when "info" then find_servers(judo, ARGV)         { |s| do_info(judo, s) }
-    when "console" then find_servers(judo, ARGV)      { |s| puts server.console_output }
+    when "console" then find_servers(judo, ARGV)      { |s| puts s.console_output }
     when "commit" then find_groups(judo, ARGV)        { |g| g.compile }
     when "ssh" then find_servers(judo, ARGV)          { |s| s.connect_ssh }
-    when "start" then find_servers(judo, ARGV)        { |s| s.start }
+    when "start" then find_servers(judo, ARGV)        { |s| s.start(options[:version]) }
     when "restart" then find_servers(judo, ARGV)      { |s| s.restart }
     when "stop" then find_servers(judo, ARGV)         { |s| s.stop }
-    when "create" then mk_servers(judo, ARGV)         { |s| s.create }
-    when "launch" then mk_servers(judo, ARGV)         { |s| s.create; s.start }
+    when "create" then mk_servers(judo, ARGV)         { |s| s.create(options[:version]) }
+    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options[:version]); s.start }
     when "destroy" then
       raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
       find_either(judo, ARGV) do |i|

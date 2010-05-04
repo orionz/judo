@@ -16,7 +16,7 @@ module JudoCommandLineHelpers
   end
 
   def find_groups(judo, args, &blk)
-    raise JudoError, "No groups #{specified}" if args.empty? and judo.group.nil?
+    raise JudoError, "No groups specified" if args.empty? and judo.group.nil?
 
     args << ":#{judo.group}" if args.empty?  ## use default group if none specified
 

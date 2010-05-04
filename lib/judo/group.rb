@@ -27,7 +27,6 @@ module Judo
       @base = base
       @name = name
       @version = version
-      puts "VERSION #{name} #{version} #{@version}"
 #      @dir = dir
     end
 
@@ -122,7 +121,6 @@ module Judo
 
     def extract_file(type, name, files)
       path = "#{dir}/#{type}s/#{name}"
-      puts "[#{name}] #{path}"
       found = Dir[path]
       if not found.empty?
         found.each { |f| files["#{type}s/#{File.basename(f)}"] = f }
@@ -148,12 +146,15 @@ module Judo
             when "local_packages"
               extract_file(:package, "#{v}_i386.deb", files)
               extract_file(:package, "#{v}_amd64.deb", files)
+            when "git"
+              ## do nothing - is a remote
             when "template"
               extract_file(:template, v, files)
             when "source"
               extract_file(:file, v, files) unless config["template"] or config["package"]
             when "file"
-              extract_file(:file, File.basename(v), files) unless config["template"] or config["source"]
+              ## this is getting messy
+              extract_file(:file, File.basename(v), files) unless config["template"] or config["source"] or config["git"]
             end
           end
         end

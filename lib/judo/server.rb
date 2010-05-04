@@ -43,13 +43,13 @@ module Judo
   class Server
     attr_accessor :name
 
-    def initialize(base, name, group)
+    def initialize(base, name, group, version = nil)
       @base = base
       @name = name
       @group_name = group
     end
 
-    def create
+    def create(version = group.version)
       raise JudoError, "no group specified" unless @group_name
 
       if @name.nil?
@@ -60,7 +60,7 @@ module Judo
       raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == @name and s != self}
 
       task("Creating server #{name}") do
-        update "name" => name, "group" => @group_name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36)
+        update "name" => name, "group" => @group_name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36), "version" => version
         @base.sdb.put_attributes("judo_config", "groups", @group_name => name)
       end
 
@@ -112,6 +112,10 @@ module Judo
 
     def version
       get("version").to_i
+    end
+
+    def update_version(new_version)
+        update "version" => new_version
     end
 
     def virgin?
@@ -263,9 +267,10 @@ module Judo
       ["pending", "running", "shutting_down", "degraded"].include?(ec2_state)
     end
 
-    def start
+    def start(new_version = nil)
       invalid "Already running" if running?
       invalid "No config has been commited yet, type 'judo commit'" unless group.version > 0
+      task("Updating server version")      { update_version(new_version) } if new_version
       task("Starting server #{name}")      { launch_ec2 }
       task("Wait for server")              { wait_for_running } if elastic_ip or has_volumes?
       task("Attaching ip")                 { attach_ip } if elastic_ip
@@ -309,8 +314,7 @@ module Judo
         :key_name => config["key_name"],
         :group_ids => security_groups,
         :user_data => ud).first
-
-      update "instance_id" => result[:aws_instance_id], "virgin" => false, "version" => group.version
+      update "instance_id" => result[:aws_instance_id], "virgin" => false
     end
 
     def debug(str)
