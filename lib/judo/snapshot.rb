@@ -32,10 +32,6 @@ module Judo
       get("version").to_i
     end
 
-    def num_ec2_snapshots
-      devs.size
-    end
-
     def devs
       Hash[ (state["devs"] || []).map { |a| a.split(":") } ]
     end

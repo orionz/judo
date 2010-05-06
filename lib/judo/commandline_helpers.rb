@@ -125,7 +125,7 @@ module JudoCommandLineHelpers
     printf "%s\n", ("-" * 80)
     judo.snapshots.each do |snapshot|
       next if args and not servers.detect { |s| s == snapshot.server }
-      printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "#{snapshot.num_ec2_snapshots}v"
+      printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "#{snapshot.ec2_ids.size}v"
     end
   end
 
@@ -139,19 +139,23 @@ module JudoCommandLineHelpers
   end
 
   def sub_info(header, data, &block)
-    if data and data != [] and data != [nil]
-      puts "  [ #{header} ]"
-      data.each do |d|
-        block.call(d)
-      end
+    return if data == []
+    return if data == {}
+    return if data.nil?
+    puts "  [ #{header} ]"
+    [ data ].flatten.each do |d|
+      block.call(d)
     end
   end
 
   def do_info(judo, server)
-    puts "#{server}"
-    sub_info("EC2", [ server.ec2_instance ]) do |i|
+    puts "[ #{server} ]"
+    printf "    %-24s: %s\n", "Group", server.group.name
+    printf "    %-24s: %s\n", "Clone Of", server.clone if server.clone
+    printf "    %-24s: %s\n", "Elastic Ip", server.elastic_ip if server.elastic_ip
+    sub_info("EC2", server.ec2_instance) do |i|
       [:aws_instance_id, :ssh_key_name, :aws_availability_zone, :aws_state, :aws_image_id, :dns_name, :aws_instance_type, :private_dns_name, :aws_launch_time, :aws_groups ].each do |k|
-        printf "\t %-24s: %s\n",k, i[k]
+        printf "    %-24s: %s\n",k, i[k]
       end
     end
     sub_info("VOLUMES", server.ec2_volumes) do |v|
@@ -164,7 +168,7 @@ module JudoCommandLineHelpers
       v[:aws_device]
     end
     sub_info("SNAPSHOTS", server.snapshots) do |s|
-      printf "    %-10s\n", s.name
+      printf "    %-10s %-15s %-8s %-5s\n", s.name, s.group_name, s.version_desc, "#{s.ec2_ids.size}v"
     end
   end
 end

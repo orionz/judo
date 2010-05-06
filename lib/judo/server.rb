@@ -8,7 +8,8 @@ module Judo
       @group_name = group
     end
 
-    def create(version = group.version, snapshots = nil)
+    def create(version = nil, snapshots = nil)
+      version ||= group.version
       raise JudoError, "no group specified" unless @group_name
 
       if @name.nil?
@@ -295,7 +296,7 @@ module Judo
     def force_detach_volumes
       volumes.each do |device,volume_id| 
         task("Force detaching #{volume_id}") do
-          @base.ec2.detach_volume(volume_id, instance_id, device, true)
+          @base.ec2.detach_volume(volume_id, instance_id, device, true) rescue nil
         end
       end
     end
