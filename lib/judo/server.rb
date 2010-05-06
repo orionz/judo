@@ -171,7 +171,7 @@ module Judo
     end
 
     def clone_snapshots(snapshots)
-      snapshots.each do |device,snap_id| 
+      snapshots.each do |device,snap_id|
         task("Creating EC2 Volume #{device} from #{snap_id}") do
           volume_id = @base.ec2.create_volume(snap_id, nil, config["availability_zone"])[:aws_id]
           add_volume(volume_id, device)
@@ -303,7 +303,7 @@ module Judo
     end
 
     def force_detach_volumes
-      volumes.each do |device,volume_id| 
+      volumes.each do |device,volume_id|
         task("Force detaching #{volume_id}") do
           @base.ec2.detach_volume(volume_id, instance_id, device, true) rescue nil
         end
@@ -382,7 +382,7 @@ module Judo
 
     def wait_for_volumes_detached
       begin
-        Timeout::timeout(30) do
+        Timeout::timeout(60) do
           loop do
             break if ec2_volumes.reject { |v| v[:aws_status] == "available" }.empty?
             sleep 2
@@ -538,6 +538,23 @@ USER_DATA
     def snapshot(name)
       snap = @base.new_snapshot(name, self.name)
       snap.create
+    end
+
+    def swapip(other)
+      ip1 = elastic_ip
+      ip2 = other.elastic_ip
+      raise JudoError, "Server must have an elastic IP to swap" unless ip1 and ip2
+
+      task("Swapping Ip Addresses") do 
+        @base.ec2.disassociate_address(ip1)
+        @base.ec2.disassociate_address(ip2)
+
+        @base.ec2.associate_address(instance_id, ip2)
+        @base.ec2.associate_address(other.instance_id, ip1)
+
+        update "elastic_ip" => ip2
+        other.update "elastic_ip" => ip1
+      end
     end
 
     def <=>(s)

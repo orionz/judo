@@ -1,6 +1,6 @@
 module Judo
   class Snapshot
-    attr_accessor :name, :server_name 
+    attr_accessor :name, :server_name
 
     def self.domain
       "judo_snapshots"
@@ -39,7 +39,7 @@ module Judo
     def create
       raise JudoError,"snapshot already exists" unless state.empty?
       raise JudoError,"server has no disks to clone: #{server.volumes}" if server.volumes.empty?
-      task("Snapshotting #{server.name}") do 
+      @base.task("Snapshotting #{server.name}") do
         devs = server.volumes.map do |dev,vol|
           "#{dev}:#{@base.ec2.create_snapshot(vol)[:aws_id]}"
         end
@@ -66,9 +66,9 @@ module Judo
 
     def destroy
       devs.each do |dev,snapshot_id|
-        task("Deleting #{dev} #{snapshot_id}") do
+        @base.task("Deleting snapshot #{snapshot_id}") do
           begin
-            @base.ec2.delete_snapshot(snapshot_id) 
+            @base.ec2.delete_snapshot(snapshot_id)
           rescue Object => e
             puts "Error destrotying snapshot #{e.message}"
           end

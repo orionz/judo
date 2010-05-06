@@ -11,7 +11,7 @@ module JudoCommandLineHelpers
     if string =~  /([^:]*):(.*)/
       [ $1, $2 ]
     else
-      [ string, nil] 
+      [ string, nil]
     end
   end
 
@@ -125,7 +125,7 @@ module JudoCommandLineHelpers
     printf "%s\n", ("-" * 80)
     judo.snapshots.each do |snapshot|
       next if args and not servers.detect { |s| s == snapshot.server }
-      printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "#{snapshot.ec2_ids.size}v"
+      printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "ebs:#{snapshot.ec2_ids.size}"
     end
   end
 
@@ -134,7 +134,7 @@ module JudoCommandLineHelpers
     printf "  SERVERS\n"
     printf "%s\n", ("-" * 80)
     servers.sort.each do |s|
-      printf "%-32s %-12s %-7s %-11s %-11s %-10s %-3s %s\n", s.name, s.group.name, s.version_desc, s.state["instance_id"], s.size_desc, s.ec2_state, "#{s.volumes.keys.size}v", s.has_ip? ? "ip" : ""
+      printf "%-32s %-12s %-7s %-11s %-11s %-10s %-3s %s\n", s.name, s.group.name, s.version_desc, s.state["instance_id"], s.size_desc, s.ec2_state, "ebs:#{s.volumes.keys.size}", s.has_ip? ? "ip" : ""
     end
   end
 

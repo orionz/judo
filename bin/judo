@@ -35,6 +35,8 @@ Usage: judo launch [options] SERVER ...
        judo clone [options] SNAPSHOT SERVER    ## create a new server from a snapshot
        judo erase [options] SNAPSHOT           ## erase an old snapshot
 
+       judo swapip [options] SERVER SERVER     ## swap elastic IP's on the two servers
+
        judo info [options] [SERVER ...]
        judo console [options] [SERVER ...] ## shows AWS console output
        judo ssh [options] [SERVER ...]     ## ssh's into the server
@@ -76,6 +78,9 @@ banner
   opts.on( '-g', '--group GROUP', 'Specify the default group of the repo dir' ) do |group|
     options[:group] = group
   end
+  opts.on( '-n', '--note NOTE', 'Add a note to a server as you create or launch it') do |note|
+    options[:note] = note
+  end
   opts.on( '-v', '--version VERSION', 'Update the servers config version on create/start/launch' ) do |version|
     options[:version] = version
   end
@@ -103,9 +108,13 @@ begin
     when "start" then find_servers(judo, ARGV)        { |s| s.start(options[:version]) }
     when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options[:force]) }
     when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options[:force]) }
-    when "create" then mk_servers(judo, ARGV)         { |s| s.create( :version => options[:version]) }
-    when "launch" then mk_servers(judo, ARGV)         { |s| s.create( :version => options[:version]); s.start }
+    when "create" then mk_servers(judo, ARGV)         { |s| s.create(options) }
+    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options); s.start }
     when "snapshots" then do_snapshots(judo, ARGV)
+    when "swapip" then
+      servers = find_servers(judo, ARGV)
+      raise JudoError, "usage: judo swapip SERVER SERVER" unless servers.size == 2
+      servers[0].swapip(servers[1])
     when "erase" then
       raise JudoError, "usage: judo erase SNAPSHOT" unless ARGV.size == 1
       snapshot_name = ARGV.shift

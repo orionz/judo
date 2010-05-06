@@ -68,13 +68,16 @@ module Judo
         :judo_dir      => dir,
         :group         => group_config ? File.basename(File.dirname(group_config)) : nil,
         :repo          => repo_dir,
-        :bucket        => config["s3_bucket"],
-        :access_id     => config["access_id"],
-        :access_secret => config["access_secret"]
+        :bucket        => (config["s3_bucket"] || ENV['JUDO_BUCKET']),
+        :access_id     => (config["access_id"] || ENV['AWS_ACCESS_KEY_ID']),
+        :access_secret => (config["access_secret"] || ENV['AWS_SECRET_ACCESS_KEY'])
       }.delete_if { |key,value| value.nil? }
     rescue Object => e
-      puts e.inspect
-      {}
+      {
+        :access_id     => ENV['AWS_ACCESS_KEY_ID'],
+        :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
+        :bucket        => ENV['JUDO_BUCKET']
+      }.delete_if { |key,value| value.nil? }
     end
 
     def self.find_judo_dir(check)
