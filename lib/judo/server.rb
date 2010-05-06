@@ -8,7 +8,10 @@ module Judo
       @group_name = group
     end
 
-    def create(version = nil, snapshots = nil)
+    def create(options)
+      version = options[:version]
+      snapshots = options[:snapshots]
+      note = options[:note]
       version ||= group.version
       raise JudoError, "no group specified" unless @group_name
 
@@ -20,7 +23,7 @@ module Judo
       raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == @name and s != self}
 
       task("Creating server #{name}") do
-        update "name" => name, "group" => @group_name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36), "version" => version
+        update "name" => name, "group" => @group_name, "note" => note, "virgin" => true, "secret" => rand(2 ** 128).to_s(36), "version" => version
         @base.sdb.put_attributes("judo_config", "groups", @group_name => name)
       end
 
@@ -84,6 +87,10 @@ module Judo
       else
         "start"
       end
+    end
+
+    def note
+      get("note")
     end
 
     def clone

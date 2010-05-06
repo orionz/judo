@@ -151,6 +151,7 @@ module JudoCommandLineHelpers
   def do_info(judo, server)
     puts "[ #{server} ]"
     printf "    %-24s: %s\n", "Group", server.group.name
+    printf "    %-24s: %s\n", "Note", server.note if server.note
     printf "    %-24s: %s\n", "Clone Of", server.clone if server.clone
     printf "    %-24s: %s\n", "Elastic Ip", server.elastic_ip if server.elastic_ip
     sub_info("EC2", server.ec2_instance) do |i|

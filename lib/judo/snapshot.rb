@@ -51,7 +51,7 @@ module Judo
     def clone(new_server, version = self.version)
       raise JudoError, "cannot clone, snapshotting not complete" unless completed?
       server = @base.new_server(new_server, group_name)
-      server.create(version, devs)
+      server.create( :version => version, :snapshots => devs)
       server.update "clone" => name ##, "secret" => rand(2 ** 128).to_s(36)  ## cant change this till kuzushi knows about a post-clone operation
     end
 

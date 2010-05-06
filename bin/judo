@@ -103,8 +103,8 @@ begin
     when "start" then find_servers(judo, ARGV)        { |s| s.start(options[:version]) }
     when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options[:force]) }
     when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options[:force]) }
-    when "create" then mk_servers(judo, ARGV)         { |s| s.create(options[:version]) }
-    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options[:version]); s.start }
+    when "create" then mk_servers(judo, ARGV)         { |s| s.create( :version => options[:version]) }
+    when "launch" then mk_servers(judo, ARGV)         { |s| s.create( :version => options[:version]); s.start }
     when "snapshots" then do_snapshots(judo, ARGV)
     when "erase" then
       raise JudoError, "usage: judo erase SNAPSHOT" unless ARGV.size == 1
