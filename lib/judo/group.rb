@@ -2,47 +2,11 @@ module Judo
   class Group
     attr_accessor :name, :version
 
-#    def self.dirs
-#      Dir["#{@base.repor}/*/config.json"].map { |d| File.dirname(d) }
-#    end
-#
-#    def self.all
-#      @@all ||= (dirs.map { |d| new(d) })
-#    end
-#
-#    def self.find(name)
-#      all.detect { |d| d.name == name }
-#    end
-#
-#    def self.[](name)
-#      find(name)
-#    end
-#
-#    def self.current
-#      all.detect { |d| Dir.pwd == d.dir or Dir.pwd =~ /^#{d.dir}\// }
-#    end
-
-#    def initialize(base, dir, name = File.basename(dir))
     def initialize(base, name, version)
       @base = base
       @name = name
       @version = version
-#      @dir = dir
     end
-
-#    def create_server(server_name)
-#      abort("Server needs a name") if server_name.nil?
-#
-##      abort("Already a server named #{server_name}") if Judo::Server.find_by_name(attrs[:name])  ## FIXME
-##      @base.read_config(attrs[:group]) ## make sure the config is valid  ## FIXME
-#
-#      server = Judo::Server.new base, server_name, name
-#      server.task("Creating server #{server_name}") do
-#        server.update "name" => server_name, "group" => name, "virgin" => true, "secret" => rand(2 ** 128).to_s(36)
-#        @base.sdb.put_attributes("judo_config", "groups", name => server_name)
-#      end
-#      server
-#    end
 
     def config
       @config ||= load_config
@@ -59,10 +23,6 @@ module Judo
     def servers
       @base.servers.select { |s| server_names.include?(s.name) }
     end
-
-#    def version
-#      @version ||= (@base.group_versions[@name] || ["0"]).first.to_i
-#    end
 
     def load_config
         JSON.load @base.s3_get(version_config_file)
@@ -217,6 +177,14 @@ module Judo
 
     def sdb
       @base.sdb
+    end
+
+    def version_desc(v)
+      if v == version
+        "v#{v}"
+      else
+        "v#{v}/#{version}"
+      end
     end
   end
 end

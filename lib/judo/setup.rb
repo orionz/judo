@@ -63,7 +63,8 @@ DEFAULT
 
     def setup_db
       puts "Trying to connect to SimpleDB with #{@aws_access_id}"
-      sdb.create_domain("judo_servers")
+      sdb.create_domain(Judo::Server.domain)
+      sdb.create_domain(Judo::Snapshot.domain)
       sdb.create_domain("judo_config")
       olddb = sdb.get_attributes("judo_config", "judo")[:attributes]["dbversion"]
       abort "There is an existing judo database of a newer version - upgrade judo and try again" if olddb and olddb.first.to_i > Judo::Config.db_version

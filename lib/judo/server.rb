@@ -1,44 +1,3 @@
-### NEEDED for new gem launch
-
-### [ ] judo does not work with ruby 1.8.6 - :(
-### [ ] saw a timeout on volume allocation - make sure we build in re-tries - need to allocate the server all together as much as possible
-### [ ] there is a feature to allow for using that block_mapping feature - faster startup
-
-### [ ] return right away.. (1 hr)
-### [ ] two phase delete (1 hr)
-### [-] refactor availability_zone (2 hrs)
-###     [ ] pick availability zone from config "X":"Y" or  "X":["Y","Z"]
-###     [ ] assign to state on creation ( could delay till volume creation )
-### [ ] implement auto security_group creation and setup (6 hrs)
-### [ ] write some examples - simple postgres/redis/couchdb server (5hrs)
-### [ ] write new README (4 hrs)
-### [ ] bind kuzushi gem version version
-### [ ] realase new gem! (1 hr)
-
-### [ ] should be able to do ALL actions except commit without the repo!
-### [ ] store git commit hash with commit to block a judo commit if there is newer material stored
-### [ ] remove the tarball - store files a sha hashes in the bucket - makes for faster commits if the files have not changed
-
-### [ ] use a logger service (1 hr)
-### [ ] write specs (5 hr)
-
-### Error Handling
-### [ ] no availability zone before making disks
-### [ ] security group does not exists
-
-### Do Later
-### [ ] use amazon's new conditional write tools so we never have problems from concurrent updates
-### [ ] is thor really what we want to use here?
-### [ ] need to be able to pin a config to a version of kuzushi - gem updates can/will break a lot of things
-### [ ] I want a "judo monitor" command that will make start servers if they go down, and poke a listed port to make sure a service is listening, would be cool if it also detects wrong ami, wrong secuirity group, missing/extra volumes, missing/extra elastic_ip - might not want to force a reboot quite yet in these cases
-### [ ] Implement "judo snapshot [NAME]" to take a snapshot of the ebs's blocks
-### [ ] ruby 1.9.1 support
-### [ ] find a good way to set the hostname or prompt to :name
-### [ ] remove fog/s3 dependancy
-### [ ] enforce template files end in .erb to make room for other possible templates as defined by the extensions
-### [ ] zerigo integration for automatic DNS setup
-### [ ] How cool would it be if this was all reimplemented in eventmachine and could start lots of boxes in parallel?  Would need to evented AWS api calls... Never seen a library to do that - would have to write our own... "Fog Machine?"
-
 module Judo
   class Server
     attr_accessor :name
@@ -49,7 +8,7 @@ module Judo
       @group_name = group
     end
 
-    def create(version = group.version)
+    def create(version = group.version, snapshots = nil)
       raise JudoError, "no group specified" unless @group_name
 
       if @name.nil?
@@ -64,7 +23,8 @@ module Judo
         @base.sdb.put_attributes("judo_config", "groups", @group_name => name)
       end
 
-      allocate_resources
+      allocate_disk(snapshots)
+      allocate_ip
 
       self
     end
@@ -102,12 +62,7 @@ module Judo
     end
 
     def version_desc
-      return "" unless running?
-      if version == group.version
-        "v#{version}"
-      else
-        "v#{version}/#{group.version}"
-      end
+      group.version_desc(version)
     end
 
     def version
@@ -118,12 +73,36 @@ module Judo
         update "version" => new_version
     end
 
+    def kuzushi_action
+      if virgin?
+        if cloned?
+          "start"
+        else
+          "init"
+        end
+      else
+        "start"
+      end
+    end
+
+    def clone
+      get("clone")
+    end
+
+    def cloned?
+      !!clone
+    end
+
     def virgin?
       get("virgin").to_s == "true"  ## I'm going to set it to true and it will come back from the db as "true" -> could be "false" or false or nil also
     end
 
     def secret
       get "secret"
+    end
+
+    def snapshots
+      base.snapshots.select { |s| s.server == self }
     end
 
     def volumes
@@ -155,7 +134,7 @@ module Judo
     end
 
     def delete
-      group.delete_server(self)
+      group.delete_server(self) if group
       @base.sdb.delete_attributes(self.class.domain, name)
     end
 
@@ -173,7 +152,24 @@ module Judo
       "#{name}:#{@group_name}"
     end
 
-    def allocate_resources
+    def allocate_disk(snapshots)
+      if snapshots
+        clone_snapshots(snapshots)
+      else
+        create_volumes
+      end
+    end
+
+    def clone_snapshots(snapshots)
+      snapshots.each do |device,snap_id| 
+        task("Creating EC2 Volume #{device} from #{snap_id}") do
+          volume_id = @base.ec2.create_volume(snap_id, nil, config["availability_zone"])[:aws_id]
+          add_volume(volume_id, device)
+        end
+      end
+    end
+
+    def create_volumes
       if config["volumes"]
         [config["volumes"]].flatten.each do |volume_config|
           device = volume_config["device"]
@@ -193,7 +189,9 @@ module Judo
           end
         end
       end
+    end
 
+    def allocate_ip
       begin
         if config["elastic_ip"] and not elastic_ip
           ### EC2 allocate_address
@@ -277,8 +275,8 @@ module Judo
       task("Attaching volumes")            { attach_volumes } if has_volumes?
     end
 
-    def restart
-      stop if running?
+    def restart(force = false)
+      stop(force) if running?
       start
     end
 
@@ -294,10 +292,19 @@ module Judo
       raise JudoInvalid, str
     end
 
-    def stop
+    def force_detach_volumes
+      volumes.each do |device,volume_id| 
+        task("Force detaching #{volume_id}") do
+          @base.ec2.detach_volume(volume_id, instance_id, device, true)
+        end
+      end
+    end
+
+    def stop(force = false)
       invalid "not running" unless running?
       ## EC2 terminate_isntaces
       task("Terminating instance") { @base.ec2.terminate_instances([ instance_id ]) }
+      force_detach_volumes if force
       task("Wait for volumes to detach") { wait_for_volumes_detached } if volumes.size > 0
       remove "instance_id"
     end
@@ -364,10 +371,15 @@ module Judo
     end
 
     def wait_for_volumes_detached
-      ## FIXME - force if it takes too long
-      loop do
-        break if ec2_volumes.reject { |v| v[:aws_status] == "available" }.empty?
-        sleep 2
+      begin
+        Timeout::timeout(30) do
+          loop do
+            break if ec2_volumes.reject { |v| v[:aws_status] == "available" }.empty?
+            sleep 2
+          end
+        end
+      rescue Timeout::Error
+        force_detach_volumes
       end
     end
 
@@ -511,6 +523,11 @@ USER_DATA
           raise "cannot use key_pair #{config["key_name"]} b/c it does not exist"
         end
       end
+    end
+
+    def snapshot(name)
+      snap = @base.new_snapshot(name, self.name)
+      snap.create
     end
 
     def <=>(s)

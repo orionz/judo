@@ -65,9 +65,10 @@ module JudoCommandLineHelpers
     raise JudoError, "No servers" if servers.empty?
 
     servers.each { |s| judo_yield(s,blk) if blk }
+    servers
   end
 
-  def find_server(judo, arg, use_default)
+  def find_server(judo, arg, use_default = false)
     ## this assumes names are unique no matter the group
     name,group = split(arg)
     if name != ""
@@ -118,12 +119,23 @@ module JudoCommandLineHelpers
     end
   end
 
+  def do_snapshots(judo, args)
+    servers = find_servers(judo, args)
+    printf "  SNAPSHOTS\n"
+    printf "%s\n", ("-" * 80)
+    ## FIXME - listing snapshots for deleted servers?
+    judo.snapshots.each do |snapshot|
+#      next if args and not servers.map { |s| s.name }.include?(snapshot.server_name)
+      printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "#{snapshot.num_ec2_snapshots}v"
+    end
+  end
+
   def do_list(judo, args)
     servers = find_servers(judo, args)
     printf "  SERVERS\n"
     printf "%s\n", ("-" * 80)
     servers.sort.each do |s|
-      printf "%-18s %-12s %-7s %-11s %-11s %-13s %-10s %-10s %s\n", s.name, s.group.name, s.version_desc, s.state["instance_id"], s.size_desc, s.ami, s.ec2_state, "#{s.volumes.keys.size} volumes", s.ip
+      printf "%-32s %-12s %-7s %-11s %-11s %-10s %-3s %s\n", s.name, s.group.name, s.version_desc, s.state["instance_id"], s.size_desc, s.ec2_state, "#{s.volumes.keys.size}v", s.has_ip? ? "ip" : ""
     end
   end
 
@@ -145,7 +157,5 @@ module JudoCommandLineHelpers
       v[:aws_attachment_status],
       v[:aws_device]
     end
-    puts "\t[ CONFIG ]"
-    pp server.config
   end
 end

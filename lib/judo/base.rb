@@ -36,7 +36,7 @@ module Judo
     end
 
     def volumes
-      @volumes ||= ec2.describe_volumes.map do |v|
+      @volumes ||= ec2_volumes.map do |v|
         {
           :id          => v[:aws_id],
           :size        => v[:aws_size],
@@ -93,6 +93,16 @@ module Judo
       @sdb ||= Aws::SdbInterface.new(access_id, access_secret, :logger => Logger.new(nil))
     end
 
+    def fetch_snapshots_state
+      s = {}
+      sdb.select("select * from #{Judo::Snapshot.domain}")[:items].each do |group|
+        group.each do |key,val|
+          s[key] = val
+        end
+      end
+      s
+    end
+
     def fetch_servers_state
       s = {}
       sdb.select("select * from #{Judo::Server.domain}")[:items].each do |group|
@@ -103,8 +113,16 @@ module Judo
       s
     end
 
+    def snapshots_state
+      @snapshots_state ||= fetch_snapshots_state
+    end
+
     def servers_state
       @servers_state ||= fetch_servers_state
+    end
+
+    def snapshots
+      @snapshots ||= snapshots_state.map { |name,data| Judo::Snapshot.new(self, name, data["server"].first) }
     end
 
     def servers
@@ -116,7 +134,13 @@ module Judo
       servers << s
       s
     end
-    
+
+    def new_snapshot(name, server)
+      s = Judo::Snapshot.new(self, name, server)
+      snapshots << s
+      s
+    end
+
     def get_group(name)
       group = groups.detect { |g| g.name == name }
       group ||= Judo::Group.new(self, name, 0)
@@ -141,6 +165,14 @@ module Judo
 
     def reload_ec2_instances
       @ec2_instance = nil
+    end
+
+    def ec2_volumes
+      @ec2_volumes ||= ec2.describe_volumes
+    end
+
+    def ec2_snapshots
+      @ec2_snapshots ||= ec2.describe_snapshots
     end
 
     def ec2_instances
@@ -206,18 +238,34 @@ module Judo
     end
 
     def db_version
-      1
+      2
+    end
+
+    def upgrade_db
+      case get_db_version
+        when 0
+          raise JudoError, "Your db appears to be unititialized.  You will need to do a judo init"
+        when 1
+          task("Upgrading Judo: Creating Snapshots SDB Domain") do
+            sdb.create_domain(Judo::Snapshot.domain)
+            set_db_version(2)
+          end
+        else
+          raise JduoError, "judo db is newer than the current gem - upgrade judo and try again"
+      end
+    end
+
+    def set_db_version(new_version)
+      @db_version = new_version
+      sdb.put_attributes("judo_config", "judo", { "dbversion" => new_version }, :replace)
     end
 
     def get_db_version
-      version = @sdb.get_attributes("judo_config", "judo")[:attributes]["dbversion"]
-      version and version.first.to_i or db_version
+      @db_version ||= sdb.get_attributes("judo_config", "judo")[:attributes]["dbversion"].first.to_i
     end
 
     def check_version
-      ## FIXME - call this somewhere
-      raise JduoError, "judo db is newer than the current gem - upgrade judo and try again" if get_db_version > db_version
+      upgrade_db if get_db_version != db_version
     end
-
   end
 end

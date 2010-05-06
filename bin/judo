@@ -30,6 +30,11 @@ Usage: judo launch [options] SERVER ...
 
        judo commit [options] GROUP
 
+       judo snapshot [options] SERVER SNAPSHOT ## take an ebs snapshot of a server
+       judo snapshots [options] [SERVER ...]   ## show current snapshots on servers
+       judo clone [options] SNAPSHOT SERVER    ## create a new server from a snapshot
+       judo erase [options] SNAPSHOT           ## erase an old snapshot
+
        judo info [options] [SERVER ...]
        judo console [options] [SERVER ...] ## shows AWS console output
        judo ssh [options] [SERVER ...]     ## ssh's into the server
@@ -52,6 +57,9 @@ banner
   opts.on( '-c', '--config DIR', 'Specify the location of the config dir' ) do |dir|
     defaults[:judo_dir] = dir
     defaults.merge(Judo::Base.default_options(Dir.pwd, dir))
+  end
+  opts.on( '-f', '--force', 'Force a stop or restart (immediately force detach volumes)' ) do
+    options[:force] = true
   end
   opts.on( '-r', '--repo DIR', 'Specify the location of the repo dir' ) do |dir|
     options[:repo] = dir
@@ -80,6 +88,7 @@ end
 optparse.parse!
 
 judo = Judo::Base.new(defaults.merge(options))
+judo.check_version
 
 begin
   case action
@@ -92,10 +101,31 @@ begin
     when "commit" then find_groups(judo, ARGV)        { |g| g.compile }
     when "ssh" then find_servers(judo, ARGV)          { |s| s.connect_ssh }
     when "start" then find_servers(judo, ARGV)        { |s| s.start(options[:version]) }
-    when "restart" then find_servers(judo, ARGV)      { |s| s.restart }
-    when "stop" then find_servers(judo, ARGV)         { |s| s.stop }
+    when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options[:force]) }
+    when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options[:force]) }
     when "create" then mk_servers(judo, ARGV)         { |s| s.create(options[:version]) }
     when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options[:version]); s.start }
+    when "snapshots" then do_snapshots(judo, ARGV)
+    when "erase" then
+      raise JudoError, "usage: judo erase SNAPSHOT" unless ARGV.size == 1
+      snapshot_name = ARGV.shift
+      judo.snapshots.select { |s| s.name == snapshot_name }.each { |s| s.destroy }
+    when "snapshot" then
+      raise JudoError, "usage: judo snapshot SERVER SNAPSHOT" unless ARGV.size == 2
+      server_name = ARGV.shift
+      snapshot_name = ARGV.shift
+      servers = find_servers(judo, [server_name])
+      raise JudoError, "You must specify a valid server to snapshot" if servers.empty?
+      raise JudoError, "You can only snapshot one server at a time" if servers.size > 1
+      servers[0].snapshot(snapshot_name)
+    when "clone" then
+      snapshot_name = ARGV.shift
+      raise JudoError, "You must specify a snapshot name" unless snapshot_name
+      new_server = ARGV.shift
+      raise JudoError, "You must specify a new server name" unless new_server
+      snapshot = judo.snapshots.detect { |s| s.name == snapshot_name }
+      raise JudoError, "No such snapshot #{snapshot_name}" unless snapshot
+      snapshot.clone(new_server,options[:version])
     when "destroy" then
       raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
       find_either(judo, ARGV) do |i|
