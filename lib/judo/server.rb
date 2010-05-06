@@ -9,11 +9,13 @@ module Judo
     end
 
     def create(options)
-      version = options[:version]
+      raise JudoError, "no group specified" unless @group_name
+
       snapshots = options[:snapshots]
       note = options[:note]
+
+      version = options[:version]
       version ||= group.version
-      raise JudoError, "no group specified" unless @group_name
 
       if @name.nil?
         index = @base.servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
