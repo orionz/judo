@@ -102,7 +102,7 @@ module Judo
     end
 
     def snapshots
-      base.snapshots.select { |s| s.server == self }
+      @base.snapshots.select { |s| s.server == self }
     end
 
     def volumes

@@ -123,9 +123,8 @@ module JudoCommandLineHelpers
     servers = find_servers(judo, args)
     printf "  SNAPSHOTS\n"
     printf "%s\n", ("-" * 80)
-    ## FIXME - listing snapshots for deleted servers?
     judo.snapshots.each do |snapshot|
-#      next if args and not servers.map { |s| s.name }.include?(snapshot.server_name)
+      next if args and not servers.detect { |s| s == snapshot.server }
       printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "#{snapshot.num_ec2_snapshots}v"
     end
   end
@@ -139,23 +138,33 @@ module JudoCommandLineHelpers
     end
   end
 
-  def do_info(judo, server)
-    puts "#{server}"
-    if server.ec2_instance and not server.ec2_instance.empty?
-      puts "\t[ EC2 ]"
-      [:aws_instance_id, :ssh_key_name, :aws_availability_zone, :aws_state, :aws_image_id, :dns_name, :aws_instance_type, :private_dns_name, :aws_launch_time, :aws_groups ].each do |k|
-        printf "\t %-24s: %s\n",k, server.ec2_instance[k]
+  def sub_info(header, data, &block)
+    if data and data != [] and data != [nil]
+      puts "  [ #{header} ]"
+      data.each do |d|
+        block.call(d)
       end
     end
-    puts "\t[ VOLUMES ]"
-    server.ec2_volumes.each do |v|
-      printf "\t %-13s %-10s %-10s %4d  %-10s %-8s\n",
+  end
+
+  def do_info(judo, server)
+    puts "#{server}"
+    sub_info("EC2", [ server.ec2_instance ]) do |i|
+      [:aws_instance_id, :ssh_key_name, :aws_availability_zone, :aws_state, :aws_image_id, :dns_name, :aws_instance_type, :private_dns_name, :aws_launch_time, :aws_groups ].each do |k|
+        printf "\t %-24s: %s\n",k, i[k]
+      end
+    end
+    sub_info("VOLUMES", server.ec2_volumes) do |v|
+      printf "    %-13s %-10s %-10s %4d  %-10s %-8s\n",
       v[:aws_id],
       v[:aws_status],
       v[:zone],
       v[:aws_size],
       v[:aws_attachment_status],
       v[:aws_device]
+    end
+    sub_info("SNAPSHOTS", server.snapshots) do |s|
+      printf "    %-10s\n", s.name
     end
   end
 end
