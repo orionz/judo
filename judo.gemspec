@@ -5,21 +5,23 @@
 
 Gem::Specification.new do |s|
   s.name = %q{judo}
-  s.version = "0.1.3"
+  s.version = "0.1.4"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Orion Henry"]
-  s.date = %q{2010-04-30}
+  s.date = %q{2010-05-06}
   s.default_executable = %q{judo}
   s.description = %q{The gentle way to manage and control ec2 instances}
   s.email = %q{orion@heroku.com}
   s.executables = ["judo"]
   s.extra_rdoc_files = [
-    "README.markdown"
+    "README.markdown",
+     "TODO"
   ]
   s.files = [
     "README.markdown",
      "Rakefile",
+     "TODO",
      "VERSION",
      "bin/judo",
      "lib/judo.rb",
@@ -29,6 +31,7 @@ Gem::Specification.new do |s|
      "lib/judo/group.rb",
      "lib/judo/server.rb",
      "lib/judo/setup.rb",
+     "lib/judo/snapshot.rb",
      "spec/base.rb",
      "spec/base_spec.rb",
      "spec/server_spec.rb"
