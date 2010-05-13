@@ -36,31 +36,32 @@ module Judo
 
     def compile
       tmpdir = "/tmp/kuzushi/#{name}"
-      puts "Compiling #{self} version #{version}"
-      @version = @version + 1
-      FileUtils.rm_rf(tmpdir)
-      FileUtils.mkdir_p(tmpdir)
-      new_config = build_config
-      Dir.chdir(tmpdir) do |d|
-        attachments(new_config).each do |to,from|
-          FileUtils.mkdir_p(File.dirname(to))
-          if from =~ /^http:\/\//
-            puts "curl '#{from}'"
-            system "curl '#{from}' > #{to}"
-            puts "#{to} is #{File.stat(to).size} bytes"
-          else
-            FileUtils.cp(from,to)
+      @base.task("Compiling #{self} version #{version + 1}") do
+        @version = @version + 1
+        FileUtils.rm_rf(tmpdir)
+        FileUtils.mkdir_p(tmpdir)
+        new_config = build_config
+        Dir.chdir(tmpdir) do |d|
+          attachments(new_config).each do |to,from|
+            FileUtils.mkdir_p(File.dirname(to))
+            if from =~ /^http:\/\//
+              # puts "curl '#{from}'"
+              system "curl '#{from}' > #{to}"
+              # puts "#{to} is #{File.stat(to).size} bytes"
+            else
+              FileUtils.cp(from,to)
+            end
+          end
+          File.open("config.json", "w") { |f| f.write(new_config.to_json) }
+          Dir.chdir("..") do
+            system "tar czf #{tar_file} #{name}"
+            # puts "Uploading to s3..."
+            @base.s3_put(tar_file, File.new(tar_file).read)
+            @base.s3_put(version_config_file, new_config.to_json)
           end
         end
-        File.open("config.json", "w") { |f| f.write(new_config.to_json) }
-        Dir.chdir("..") do
-          system "tar czvf #{tar_file} #{name}"
-          puts "Uploading to s3..."
-          @base.s3_put(tar_file, File.new(tar_file))
-          @base.s3_put(version_config_file, new_config.to_json)
-        end
+        set_version
       end
-      set_version
     end
 
     def version_config_file

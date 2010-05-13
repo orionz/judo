@@ -60,6 +60,10 @@ module Judo
       end
     end
 
+    def self.domain
+      "judo_config"
+    end
+
     def self.default_options(pwd, dir = find_judo_dir(pwd))
       config = YAML.load File.read("#{dir}/config.yml")
       repo_dir = config["repo"] || File.dirname(dir)
@@ -207,7 +211,7 @@ module Judo
     end
 
     def bucket
-      @bucket ||= s3.bucket(bucket_name)
+      @bucket ||= s3.bucket(bucket_name, true)
     end
 
     def s3_url(k)
@@ -247,7 +251,12 @@ module Judo
     def upgrade_db
       case get_db_version
         when 0
-          raise JudoError, "Your db appears to be unititialized.  You will need to do a judo init"
+          task("Upgrading Judo: Creating Snapshots SDB Domain") do
+            sdb.create_domain(Judo::Server.domain)
+            sdb.create_domain(Judo::Snapshot.domain)
+            sdb.create_domain(Judo::Snapshot.domain)
+            set_db_version(2)
+          end
         when 1
           task("Upgrading Judo: Creating Snapshots SDB Domain") do
             sdb.create_domain(Judo::Snapshot.domain)
@@ -269,6 +278,82 @@ module Judo
 
     def check_version
       upgrade_db if get_db_version != db_version
+    end
+
+    def setup
+      ## no need to setup bucket
+
+      @repo ||= "." ## use cwd as default repo dir
+
+      setup_sdb
+      setup_security_group
+      setup_judo_config
+      setup_repo
+      get_group("default").compile
+    end
+
+    def setup_sdb
+      task("Trying to connect to SimpleDB") do
+        sdb.create_domain(Judo::Base.domain)
+      end
+    end
+
+    def setup_security_group
+      begin
+        ec2.create_security_group('judo', 'Judo')
+        ec2.authorize_security_group_IP_ingress("judo", 22, 22,'tcp','0.0.0.0/0')
+      rescue Aws::AwsError => e
+        raise unless e.message =~ /InvalidGroup.Duplicate/
+      end
+    end
+
+    def setup_judo_config
+      if judo_dir and File.exists?("#{judo_dir}/config.yml")
+        puts "config already exists [#{judo_dir}/config.yml]"
+        return
+      end
+      raise JudoError, "You must specify a repo dir" unless repo
+      task("writing .judo/config.yml") do
+        Dir.chdir(repo) do
+          system "mkdir .judo"
+          File.open(".judo/config.yml","w") do |f| 
+            f.write({ "access_id" => @aws_access_id, "access_secret" => @aws_secret_key, "s3_bucket" => @s3_bucket }.to_yaml)
+          end
+        end
+      end
+    end
+
+    def setup_repo
+      if File.exists?("#{repo}/default")
+        puts "default group already exists [#{repo}/default]"
+        return
+      end
+      task("Setting up default group") do
+        Dir.chdir(repo) do
+          system "mkdir -p default/keypairs"
+
+          @keypair = "judo#{ec2.describe_key_pairs.map { |k| k[:aws_key_name] }.map { |k| k =~ /^judo(\d*)/; $1.to_i }.sort.last.to_i + 1}"
+          material = ec2.create_key_pair(@keypair)[:aws_material]
+
+          File.open("default/keypairs/#{@keypair}.pem", 'w') { |f| f.write material }
+          File.chmod 0600, "default/keypairs/#{@keypair}.pem"
+          File.open("default/config.json","w") { |f| f.write default_config }
+        end
+      end
+    end
+
+    def default_config
+        <<DEFAULT
+{
+  "key_name":"#{@keypair}",
+  "instance_size":"m1.small",
+  "ami32":"ami-bb709dd2", // public ubuntu 9.10 ami - 32 bit
+  "ami64":"ami-55739e3c", // public ubuntu 9.10 ami - 64 bit
+  "user":"ubuntu",
+  "security_group":"judo",
+  "availability_zone":"us-east-1d"
+}
+DEFAULT
     end
   end
 end

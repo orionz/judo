@@ -5,6 +5,14 @@ to get going and powerful.
 
 ## CONCEPTS
 
+Servers and Groups.  Servers are identified by a naked string.  Groups always
+have a colon prefix.
+
+    $ judo restart my_server_1              ## this restarts my_server_1
+    $ judo restart my_server_1 other_server ## this restarts my_server_1 and other_server
+    $ judo restart :default                 ## this restarts all servers in the :default group
+    $ judo restart sammy :default :db       ## this restarts all servers in the :default group, the :db group, and a server named sammy
+
 Config Repo: Judo keeps it configuration for each server group in a git repo.
 
 State Database: Judo keeps cloud state and information on specific servers in SimpleDB.
@@ -22,36 +30,38 @@ Setting up a new judo repo named "my_cloud" would look like this:
 
     $ mkdir my_cloud
     $ cd my_cloud
-    $ git init
-    $ judo init
+    $ judo setup --accessid AWS_ACCESS_ID --secret AWS_KEY --bucket BUCKET
 
-The 'judo init' command will make a .judo folder to store your EC2 keys and S3
+Note: you can use the AWS_SECRET_ACCESS_KEY, AWS_ACCESS_KEY_ID and JUDO_BUCKET
+enviornment variables instead of the command line switches.
+
+The 'judo setup' command will make a .judo folder to store your EC2 keys and S3
 bucket.  It will also make a folder named "default" to hold the default server
 config.
 
 To view all of the groups and servers running in those group you can type:
 
-    $ judo list
-      SERVER GROUPS
-    default            0 servers
+    $ judo groups
 
-To launch a default server you need to cd into the default folder:
+To launch a default server you create it
 
-    $ cd default
-    $ judo create my_server_1
+    $ judo create my_server_1:default
     ---> Creating server my_server_1...     done (0.6s)
     $ judo list
-      SERVER IN GROUP my_server_1
-    my_server_1                       m1.small    ami-bb709dd2             0 volumes
+      SERVERS
+    --------------------------------------------------------------------------------
+      my_server_1            default      v12             m1.small               ebs:0 
     $ judo start my_server_1
-    No config has been committed yet, type 'judo commit'
+    ---> Starting server my_server_1... done (2.3s)
+    $ judo list
+      SERVERS
+    --------------------------------------------------------------------------------
+    my_server_1              default      v1  i-6fdf8d09  m1.small    running    ebs:0 
 
-The server has now been created but cannot be launched because the config has
-not been committed.  Committing the config loads the config.json and all of the
-scripts and packages it needs to run into your S3 bucket.  The config probably
-looks something like this:
+You can examine a groups config by looking in the group folder in the repo.  The 
+default group will look something like this.
 
-    $ cat config.json
+    $ cat default/config.json
     {
         "key_name":"judo14",
         "instance_size":"m1.small",
@@ -62,44 +72,28 @@ looks something like this:
         "availability_zone":"us-east-1d"
     }
 
-The default config uses the public ubuntu 9.10 ami's.  It runs in the judo
-security group and a judo key pair (which were made during the init process).
-The user parameter is the user the 'judo ssh' command attempts to ssh in using
-the keypair.  Other debian based distros can be used assuming they have current
-enough installations of ruby (1.8.7) and rubygems (1.3.5).
+Any changes you make to these files does not stick until you've committed them.
+To commit a group do the following.
 
-    $ judo commit
-    Compiling version 1
-    a default
-    a default/config.json
-    Uploading to s3...
-    $ judo start my_server_1
-    ---> Starting server my_server_1... done (2.3s)
-    ---> Acquire hostname...      ec2-1-2-3-4.compute-1.amazonaws.com (49.8s)
-    ---> Wait for ssh...          done (9.8s)
-    $ judo list
-      SERVER IN GROUP default
-    my_server_1       v1   i-80000000  m1.small    ami-bb709dd2  running    0 volumes  ec2-1-2-3-4.compute-1.amazonaws.com
+    $ judo commit :default
+    Compiling version 2... done (1.2s)
 
 We can now see that 'my_server_1' is running and running with version 1 of the
 config.  We can create and start a server in one step with the launch command.
 
-    $ judo launch my_server_2
+    $ judo launch my_server_2:default
     ---> Creating server my_server_2... done (0.6s)
     ---> Starting server my_server_2... done (1.6s)
-    ---> Acquire hostname...      ec2-1-2-3-5.compute-1.amazonaws.com (31.1s)
-    ---> Wait for ssh...          done (6.1s)
 
 This will create and start two servers.  One named 'my_server_1' and one named
 'my_server_2'.  You can ssh into 'my_server_1' you can type:
 
     $ judo ssh my_server_1
 
-You can stop all the servers with:
+You can stop all the servers in the :default group with:
 
-    $ judo stop
+    $ judo stop :default
 
-Note that since no name was specified it will stop all servers in the group.
 You could also have typed:
 
   $ judo stop my_server_1 my_server_2
@@ -115,7 +109,7 @@ operation is run on all servers.  For instance:
 
 This will restart only the servers named 'primary_db' and 'backup_db'.  Where as
 
-    $ judo restart
+    $ judo restart :db
 
 will restart all servers in the group.
 

@@ -315,7 +315,7 @@ module Judo
       ## EC2 terminate_isntaces
       task("Terminating instance") { @base.ec2.terminate_instances([ instance_id ]) }
       force_detach_volumes if force
-      task("Wait for volumes to detach") { wait_for_volumes_detached } if volumes.size > 0
+      wait_for_volumes_detached if volumes.size > 0
       remove "instance_id"
     end
 
@@ -382,14 +382,18 @@ module Judo
 
     def wait_for_volumes_detached
       begin
-        Timeout::timeout(60) do
-          loop do
-            break if ec2_volumes.reject { |v| v[:aws_status] == "available" }.empty?
-            sleep 2
+        task("Wait for volumes to detach") do
+          Timeout::timeout(60) do
+            loop do
+              break if ec2_volumes.reject { |v| v[:aws_status] == "available" }.empty?
+              sleep 2
+            end
           end
         end
       rescue Timeout::Error
+        puts "failed!"
         force_detach_volumes
+        retry
       end
     end
 
@@ -463,29 +467,6 @@ module Judo
       system "ssh -i #{group.keypair_file} #{config["user"]}@#{hostname}"
     end
 
-    def self.commit
-      ## FIXME
-      Config.group_dirs.each do |group_dir|
-        group = File.basename(group_dir)
-        next if Config.group and Config.group != group
-        puts "commiting #{group}"
-        doc = Config.couchdb.get(group) rescue {}
-        config = Config.read_config(group)
-        config['_id'] = group
-        config['_rev'] = doc['_rev'] if doc.has_key?('_rev')
-        response = Config.couchdb.save_doc(config)
-        doc = Config.couchdb.get(response['id'])
-
-        # walk subdirs and save as _attachments
-        ['files', 'templates', 'packages', 'scripts'].each { |subdir|
-          Dir["#{group_dir}/#{subdir}/*"].each do |f|
-            puts "storing attachment #{f}"
-            doc.put_attachment("#{subdir}/#{File.basename(f)}", File.read(f))
-          end
-        }
-      end
-    end
-
     def ec2_instance_type
       ec2_instance[:aws_instance_type] rescue nil
     end
@@ -505,6 +486,7 @@ module Judo
 
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
+export JUDO_ID='#{name}'
 export SECRET='#{secret}'
 apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y

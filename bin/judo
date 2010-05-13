@@ -93,10 +93,11 @@ end
 optparse.parse!
 
 judo = Judo::Base.new(defaults.merge(options))
-judo.check_version
+judo.check_version if action != "setup"
 
 begin
   case action
+    when "setup" then judo.setup
     when "ips" then do_ips(judo)
     when "volumes" then do_volumes(judo)
     when "list" then do_list(judo, ARGV)
