@@ -85,7 +85,7 @@ banner
     options[:access_id] = id
   end
   opts.on( '-s', '--secret KEY', 'Specify the AWS access secret key' ) do |key|
-    options[:access_key] = key
+    options[:access_secret] = key
   end
   opts.on( '-b', '--bucket BUCKET', 'Specify the AWS S3 bucket to use' ) do |bucket|
     options[:bucket] = bucket
