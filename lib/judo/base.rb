@@ -317,7 +317,7 @@ module Judo
         Dir.chdir(repo) do
           system "mkdir .judo"
           File.open(".judo/config.yml","w") do |f| 
-            f.write({ "access_id" => @aws_access_id, "access_secret" => @aws_secret_key, "s3_bucket" => @s3_bucket }.to_yaml)
+            f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
           end
         end
       end
