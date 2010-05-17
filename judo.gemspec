@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{judo}
-  s.version = "0.2.3"
+  s.version = "0.2.4"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Orion Henry"]
-  s.date = %q{2010-05-13}
+  s.date = %q{2010-05-17}
   s.default_executable = %q{judo}
   s.description = %q{The gentle way to manage and control ec2 instances}
   s.email = %q{orion@heroku.com}
