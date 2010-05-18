@@ -137,7 +137,7 @@ module Judo
 
     def parent
       @parent ||= @base.groups.detect { |p| p.name == raw_config["import"] }
-      raise JudoError, "Parent group #{raw_config["import"]} must be commited" if raw_config["import"] and @parent.nil?
+      (@parent ||= Judo::Group.new(@base, raw_config["import"], 0 )) if raw_config["import"]  ## make a mock incase the parent was never committed
       @parent
     end
 

@@ -33,6 +33,7 @@ module Judo
       @bucket_name   = options[:bucket]
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
+      @domain        = options[:domain]
     end
 
     def volumes
@@ -60,16 +61,24 @@ module Judo
       end
     end
 
+    def sdb_domain(name)
+      if @domain
+        "#{@domain}_#{name}"
+      else
+        name
+      end
+    end
+
     def server_domain
-      "judo_servers"
+      sdb_domain("judo_servers")
     end
 
     def snapshot_domain
-      "judo_snapshots"
+      sdb_domain("judo_snapshots")
     end
 
     def base_domain
-      "judo_config"
+      sdb_domain("judo_config")
     end
 
     def self.default_options(pwd, dir = find_judo_dir(pwd))
@@ -80,6 +89,7 @@ module Judo
         :judo_dir      => dir,
         :group         => group_config ? File.basename(File.dirname(group_config)) : nil,
         :repo          => repo_dir,
+        :domain        => (config["domain"] || ENV['JUDO_DOMAIN']),
         :bucket        => (config["s3_bucket"] || ENV['JUDO_BUCKET']),
         :access_id     => (config["access_id"] || ENV['AWS_ACCESS_KEY_ID']),
         :access_secret => (config["access_secret"] || ENV['AWS_SECRET_ACCESS_KEY'])
@@ -223,15 +233,23 @@ module Judo
     end
 
     def s3_url(k)
-      Aws::S3Generator::Key.new(bucket, k).get
+      Aws::S3Generator::Key.new(bucket, s3_key(k)).get
     end
 
     def s3_get(k)
-      bucket.get(k)
+      bucket.get( s3_key(k))
     end
 
     def s3_put(k, file)
-      bucket.put(k, file)
+      bucket.put( s3_key(k), file)
+    end
+
+    def s3_key(k)
+      if @domain
+        "#{@domain}/#{k}"
+      else
+        k
+      end
     end
 
     def repo
@@ -281,11 +299,14 @@ module Judo
     end
 
     def get_db_version
-      @db_version ||= sdb.get_attributes(base_domain, "judo")[:attributes]["dbversion"].first.to_i
+      @db_version ||= [sdb.get_attributes(base_domain, "judo")[:attributes]["dbversion"]].flatten.first.to_i
     end
 
     def check_version
-      upgrade_db if get_db_version != db_version
+        upgrade_db if get_db_version != db_version
+      rescue Aws::AwsError => e
+        setup_sdb
+        upgrade_db
     end
 
     def setup

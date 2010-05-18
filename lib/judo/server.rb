@@ -56,6 +56,10 @@ module Judo
       state[key] && [state[key]].flatten.first
     end
 
+    def data
+      get "data"
+    end
+
     def instance_id
       get "instance_id"
     end
@@ -495,7 +499,7 @@ export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
 export JUDO_ID='#{name}'
 export JUDO_BOOT='#{judo_boot}'
-export JUDO_DATA='#{judo_data}'
+export JUDO_DATA='#{data}'
 export SECRET='#{secret}'
 apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y

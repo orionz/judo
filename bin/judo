@@ -63,6 +63,9 @@ banner
   opts.on( '-f', '--force', 'Force a stop or restart (immediately force detach volumes)' ) do
     options[:force] = true
   end
+  opts.on( '-d', '--domain DOMAIN', 'Specify a judo domain within an AWS account' ) do |domain|
+    options[:domain] = domain
+  end
   opts.on( '-r', '--repo DIR', 'Specify the location of the repo dir' ) do |dir|
     options[:repo] = dir
   end
