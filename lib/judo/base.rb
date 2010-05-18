@@ -98,7 +98,8 @@ module Judo
       {
         :access_id     => ENV['AWS_ACCESS_KEY_ID'],
         :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
-        :bucket        => ENV['JUDO_BUCKET']
+        :bucket        => ENV['JUDO_BUCKET'],
+        :domain        => ENV['JUDO_DOMAIN'],
       }.delete_if { |key,value| value.nil? }
     end
 
