@@ -60,7 +60,15 @@ module Judo
       end
     end
 
-    def self.domain
+    def server_domain
+      "judo_servers"
+    end
+
+    def snapshot_domain
+      "judo_snapshots"
+    end
+
+    def base_domain
       "judo_config"
     end
 
@@ -102,7 +110,7 @@ module Judo
 
     def fetch_snapshots_state
       s = {}
-      sdb.select("select * from #{Judo::Snapshot.domain}")[:items].each do |group|
+      sdb.select("select * from #{snapshot_domain}")[:items].each do |group|
         group.each do |key,val|
           s[key] = val
         end
@@ -112,7 +120,7 @@ module Judo
 
     def fetch_servers_state
       s = {}
-      sdb.select("select * from #{Judo::Server.domain}")[:items].each do |group|
+      sdb.select("select * from #{server_domain}")[:items].each do |group|
         group.each do |key,val|
           s[key] = val
         end
@@ -191,11 +199,11 @@ module Judo
     end
 
     def groups_config
-      @groups_config ||= sdb.get_attributes("judo_config", "groups")[:attributes]
+      @groups_config ||= sdb.get_attributes(base_domain, "groups")[:attributes]
     end
 
     def group_versions
-      @group_version ||= sdb.get_attributes("judo_config", "group_versions")[:attributes]
+      @group_version ||= sdb.get_attributes(base_domain, "group_versions")[:attributes]
     end
 
     def ip_to_judo(ip)
@@ -252,14 +260,14 @@ module Judo
       case get_db_version
         when 0
           task("Upgrading Judo: Creating Snapshots SDB Domain") do
-            sdb.create_domain(Judo::Server.domain)
-            sdb.create_domain(Judo::Snapshot.domain)
-            sdb.create_domain(Judo::Snapshot.domain)
+            sdb.create_domain(server_domain)
+            sdb.create_domain(base_domain)
+            sdb.create_domain(snapshot_domain)
             set_db_version(2)
           end
         when 1
           task("Upgrading Judo: Creating Snapshots SDB Domain") do
-            sdb.create_domain(Judo::Snapshot.domain)
+            sdb.create_domain(snapshot_domain)
             set_db_version(2)
           end
         else
@@ -269,11 +277,11 @@ module Judo
 
     def set_db_version(new_version)
       @db_version = new_version
-      sdb.put_attributes("judo_config", "judo", { "dbversion" => new_version }, :replace)
+      sdb.put_attributes(base_domain, "judo", { "dbversion" => new_version }, :replace)
     end
 
     def get_db_version
-      @db_version ||= sdb.get_attributes("judo_config", "judo")[:attributes]["dbversion"].first.to_i
+      @db_version ||= sdb.get_attributes(base_domain, "judo")[:attributes]["dbversion"].first.to_i
     end
 
     def check_version
@@ -294,7 +302,7 @@ module Judo
 
     def setup_sdb
       task("Trying to connect to SimpleDB") do
-        sdb.create_domain(Judo::Base.domain)
+        sdb.create_domain(base_domain)
       end
     end
 
@@ -316,7 +324,7 @@ module Judo
       task("writing .judo/config.yml") do
         Dir.chdir(repo) do
           system "mkdir .judo"
-          File.open(".judo/config.yml","w") do |f| 
+          File.open(".judo/config.yml","w") do |f|
             f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
           end
         end
@@ -346,7 +354,7 @@ module Judo
         <<DEFAULT
 {
   "key_name":"#{@keypair}",
-  "instance_size":"m1.small",
+  "instance_type":"m1.small",
   "ami32":"ami-bb709dd2", // public ubuntu 9.10 ami - 32 bit
   "ami64":"ami-55739e3c", // public ubuntu 9.10 ami - 64 bit
   "user":"ubuntu",

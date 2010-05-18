@@ -17,7 +17,7 @@ module Judo
     end
 
     def fetch_state
-      @base.sdb.get_attributes(self.class.domain, name)[:attributes]
+      @base.sdb.get_attributes(@base.snapshot_domain, name)[:attributes]
     end
 
     def state
@@ -43,7 +43,7 @@ module Judo
         devs = server.volumes.map do |dev,vol|
           "#{dev}:#{@base.ec2.create_snapshot(vol)[:aws_id]}"
         end
-        @base.sdb.put_attributes(self.class.domain, name, { "version" => server.version, "devs" => devs, "server" => server.name, "group" => server.group.name }, :replace)
+        @base.sdb.put_attributes(@base.snapshot_domain, name, { "version" => server.version, "devs" => devs, "server" => server.name, "group" => server.group.name }, :replace)
         server.add "snapshots", name
       end
     end
@@ -56,7 +56,7 @@ module Judo
     end
 
     def delete
-      @base.sdb.delete_attributes(self.class.domain, name)
+      @base.sdb.delete_attributes(@base.snapshot_domain, name)
       server.remove "snapshots", name
     end
 
@@ -98,7 +98,7 @@ module Judo
     end
 
     def fetch_state
-      @base.sdb.get_attributes(self.class.domain, name)[:attributes]
+      @base.sdb.get_attributes(@base.snapshot_domain, name)[:attributes]
     end
   end
 end

@@ -31,7 +31,7 @@ module Judo
     end
 
     def set_version
-      @base.sdb.put_attributes("judo_config", "group_versions", { name => version }, :replace)
+      @base.sdb.put_attributes(@base.base_domain, "group_versions", { name => version }, :replace)
     end
 
     def compile
@@ -145,8 +145,8 @@ module Judo
       servers.each { |s| s.destroy }
       @base.task("Destring #{self}") do
         @base.groups.delete(self)
-        @base.sdb.delete_attributes("judo_config", "groups", [ name ])
-        @base.sdb.delete_attributes("judo_config", "group_versions", [ name ])
+        @base.sdb.delete_attributes(@base.base_domain, "groups", [ name ])
+        @base.sdb.delete_attributes(@base.base_domain, "group_versions", [ name ])
       end
     end
 
@@ -169,7 +169,7 @@ module Judo
     end
 
     def delete_server(server)
-      sdb.delete_attributes("judo_config", "groups", name => server.name)
+      sdb.delete_attributes(@base.base_domain, "groups", name => server.name)
     end
 
     def to_s

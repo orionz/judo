@@ -66,6 +66,18 @@ banner
   opts.on( '-r', '--repo DIR', 'Specify the location of the repo dir' ) do |dir|
     options[:repo] = dir
   end
+  opts.on( '-D', '--data DATA', 'Specify an instance specific string to be used during boot on create or launch' ) do |data|
+    options[:data] = data
+  end
+  opts.on( '-t', '--type TYPE', 'Specify an instance type different from the config on server start' ) do |type|
+    options[:instance_type] = type
+  end
+  opts.on( '-B', '--boot BOOT', 'Instance specific string (like --data) but for this boot only' ) do |data|
+    options[:boot] = data
+  end
+  opts.on( '-i', '--ip IP', 'XXX' ) do |ip|
+    options[:elastic_ip] = ip
+  end
   opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|
     options[:access_id] = id
   end
@@ -106,11 +118,11 @@ begin
     when "console" then find_servers(judo, ARGV)      { |s| puts s.console_output }
     when "commit" then find_groups(judo, ARGV)        { |g| g.compile }
     when "ssh" then find_servers(judo, ARGV)          { |s| s.connect_ssh }
-    when "start" then find_servers(judo, ARGV)        { |s| s.start(options[:version]) }
-    when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options[:force]) }
-    when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options[:force]) }
+    when "start" then find_servers(judo, ARGV)        { |s| s.start(options) }
+    when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options) }
+    when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options) }
     when "create" then mk_servers(judo, ARGV)         { |s| s.create(options) }
-    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options); s.start }
+    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options); s.start(options) }
     when "snapshots" then do_snapshots(judo, ARGV)
     when "swapip" then
       servers = find_servers(judo, ARGV)

@@ -64,7 +64,7 @@ default group will look something like this.
     $ cat default/config.json
     {
         "key_name":"judo14",
-        "instance_size":"m1.small",
+        "instance_type":"m1.small",
         "ami32":"ami-bb709dd2", // public ubuntu 9.10 ami - 32 bit
         "ami64":"ami-55739e3c", // public ubuntu 9.10 ami - 64 bit
         "user":"ubuntu",
@@ -208,7 +208,7 @@ A memcached server:
         "elastic_ip" : true,
         // only need 1 package
         "packages" : "memcached",
-        "instance_size" : "m1.xlarge",
+        "instance_type" : "m1.xlarge",
         "files" : [
           { "file"     : "/etc/memcached.conf",
             "template" : "memcached.conf.erb" },
@@ -239,7 +239,7 @@ A redis server with a 2 disk xfs raid 0:
         // dont repeat yourself - import the basic config
         "import" : "default",
         "elastic_ip" : true,
-        "instance_size" : "m2.xlarge",
+        "instance_type" : "m2.xlarge",
         "local_packages" : { "package" : "redis-server_1.2.5-1", "source" : "http://http.us.debian.org/debian/pool/main/r/redis/" },
         "volumes" : [{ "device" : "/dev/sde1",
                        "media"  : "ebs",
@@ -274,7 +274,7 @@ default config.  The system is expecting a registered keypair in this case
 named "keypair123" with a "keypair123.pem" file located in a subfolder named
 "keypairs".
 
-    "instance_size":"m1.small",
+    "instance_type":"m1.small",
 
 Specify the instance size for the server type here. See:
 http://aws.amazon.com/ec2/instance-types/
@@ -309,7 +309,7 @@ This command is very import and allows you inherit the configurations and files
 from other groups.  If you wanted to make a group called 'mysql' that was
 exactly like the default group except it installed the mysql package and ran on
 a m2.4xlarge instance type you could specify it like this:
-	{ "import : "default", "packages" : [ "mysql" ], "instance_size" : "m2.4xlarge" }
+	{ "import : "default", "packages" : [ "mysql" ], "instance_type" : "m2.4xlarge" }
 and save yourself a lot of typing.  You could further subclass by making a new
 group and importing this config.
 

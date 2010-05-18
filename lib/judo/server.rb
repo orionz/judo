@@ -12,7 +12,9 @@ module Judo
       raise JudoError, "no group specified" unless @group_name
 
       snapshots = options[:snapshots]
-      note = options[:note]
+      note = options[:note]  ## a user defined note field
+      data = options[:data]  ## instance specific data passed in JUDO_DATA
+      ip = options[:ip]      ## if the ip was allocated beforehand
 
       version = options[:version]
       version ||= group.version
@@ -25,8 +27,8 @@ module Judo
       raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == @name and s != self}
 
       task("Creating server #{name}") do
-        update "name" => name, "group" => @group_name, "note" => note, "virgin" => true, "secret" => rand(2 ** 128).to_s(36), "version" => version
-        @base.sdb.put_attributes("judo_config", "groups", @group_name => name)
+        update "name" => name, "group" => @group_name, "note" => note, "virgin" => true, "secret" => rand(2 ** 128).to_s(36), "version" => version, "data" => data, "elastic_ip" => ip
+        @base.sdb.put_attributes(@base.base_domain, "groups", @group_name => name)
       end
 
       allocate_disk(snapshots)
@@ -40,7 +42,7 @@ module Judo
     end
 
     def fetch_state
-      @base.sdb.get_attributes(self.class.domain, name)[:attributes]
+      @base.sdb.get_attributes(@base.server_domain, name)[:attributes]
     end
 
     def state
@@ -60,10 +62,10 @@ module Judo
     end
 
     def size_desc
-      if not running? or ec2_instance_type == instance_size
-        instance_size
+      if not running? or ec2_instance_type == instance_type
+        instance_type
       else
-        "#{ec2_instance_type}/#{instance_size}"
+        "#{ec2_instance_type}/#{instance_type}"
       end
     end
 
@@ -119,39 +121,36 @@ module Judo
       Hash[ (state["volumes"] || []).map { |a| a.split(":") } ]
     end
 
-    def self.domain
-      "judo_servers"
-    end
-
     def update(attrs)
-      @base.sdb.put_attributes(self.class.domain, name, attrs, :replace)
+      @base.sdb.put_attributes(@base.server_domain, name, attrs, :replace)
       state.merge! attrs
     end
 
     def add(key, value)
-      @base.sdb.put_attributes(self.class.domain, name, { key => value })
+      @base.sdb.put_attributes(@base.server_domain, name, { key => value })
       (state[key] ||= []) << value
     end
 
     def remove(key, value = nil)
       if value
-        @base.sdb.delete_attributes(self.class.domain, name, key => value)
+        @base.sdb.delete_attributes(@base.server_domain, name, key => value)
         state[key] - [value]
       else
-        @base.sdb.delete_attributes(self.class.domain, name, [ key ])
+        @base.sdb.delete_attributes(@base.server_domain, name, [ key ])
         state.delete(key)
       end
     end
 
     def delete
       group.delete_server(self) if group
-      @base.sdb.delete_attributes(self.class.domain, name)
+      @base.sdb.delete_attributes(@base.server_domain, name)
     end
 
 ######## end simple DB access  #######
 
-    def instance_size
-      config["instance_size"]
+    def instance_type
+     ## need instance_size to be backward compatible - needed for configs made before v 0.3.0
+     get("instance_type") || config["instance_type"] || config["instance_size"]
     end
 
     def config
@@ -275,18 +274,22 @@ module Judo
       ["pending", "running", "shutting_down", "degraded"].include?(ec2_state)
     end
 
-    def start(new_version = nil)
+    def start(options = {})
+      new_version = options[:version]
+      set_instance_type(options[:instance_type]) if options[:instance_type]
+
       invalid "Already running" if running?
       invalid "No config has been commited yet, type 'judo commit'" unless group.version > 0
-      task("Updating server version")      { update_version(new_version) } if new_version
-      task("Starting server #{name}")      { launch_ec2 }
+
+      task("Updating server version")      { update_version(options[:version]) } if options[:version]
+      task("Starting server #{name}")      { launch_ec2(options[:boot]) }
       task("Wait for server")              { wait_for_running } if elastic_ip or has_volumes?
       task("Attaching ip")                 { attach_ip } if elastic_ip
       task("Attaching volumes")            { attach_volumes } if has_volumes?
     end
 
-    def restart(force = false)
-      stop(force) if running?
+    def restart(options = {})
+      stop(options) if running?
       start
     end
 
@@ -310,7 +313,8 @@ module Judo
       end
     end
 
-    def stop(force = false)
+    def stop(options = {})
+      force = options[:force]
       invalid "not running" unless running?
       ## EC2 terminate_isntaces
       task("Terminating instance") { @base.ec2.terminate_instances([ instance_id ]) }
@@ -319,14 +323,14 @@ module Judo
       remove "instance_id"
     end
 
-    def launch_ec2
+    def launch_ec2(boot = nil)
 #      validate
 
       ## EC2 launch_instances
-      ud = user_data
+      ud = user_data(boot)
       debug(ud)
       result = @base.ec2.launch_instances(ami,
-        :instance_type => config["instance_size"],
+        :instance_type => instance_type,
         :availability_zone => config["availability_zone"],
         :key_name => config["key_name"],
         :group_ids => security_groups,
@@ -353,7 +357,7 @@ module Judo
     end
 
     def ia32?
-      ["m1.small", "c1.medium"].include?(instance_size)
+      ["m1.small", "c1.medium"].include?(instance_type)
     end
 
     def ia64?
@@ -480,13 +484,15 @@ module Judo
       @base.servers_state.delete(name)
     end
 
-    def user_data
+    def user_data(judo_boot = nil)
       <<USER_DATA
 #!/bin/sh
 
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
 export JUDO_ID='#{name}'
+export JUDO_BOOT='#{judo_boot}'
+export JUDO_DATA='#{judo_data}'
 export SECRET='#{secret}'
 apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
@@ -527,7 +533,7 @@ USER_DATA
       ip2 = other.elastic_ip
       raise JudoError, "Server must have an elastic IP to swap" unless ip1 and ip2
 
-      task("Swapping Ip Addresses") do 
+      task("Swapping Ip Addresses") do
         @base.ec2.disassociate_address(ip1)
         @base.ec2.disassociate_address(ip2)
 
