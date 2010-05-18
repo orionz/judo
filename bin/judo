@@ -75,7 +75,7 @@ banner
   opts.on( '-B', '--boot BOOT', 'Instance specific string (like --data) but for this boot only' ) do |data|
     options[:boot] = data
   end
-  opts.on( '-i', '--ip IP', 'XXX' ) do |ip|
+  opts.on( '-i', '--ip IP', 'Specify an exsiting elastic_ip address on server creation' ) do |ip|
     options[:elastic_ip] = ip
   end
   opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|

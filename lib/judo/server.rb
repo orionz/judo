@@ -1,6 +1,6 @@
 module Judo
   class Server
-    attr_accessor :name
+    attr_accessor :name, :group_name
 
     def initialize(base, name, group, version = nil)
       @base = base
@@ -9,12 +9,12 @@ module Judo
     end
 
     def create(options)
-      raise JudoError, "no group specified" unless @group_name
+      raise JudoError, "no group specified" unless group_name
 
-      snapshots = options[:snapshots]
-      note = options[:note]  ## a user defined note field
-      data = options[:data]  ## instance specific data passed in JUDO_DATA
-      ip = options[:ip]      ## if the ip was allocated beforehand
+      snapshots  = options[:snapshots]
+      note       = options[:note]  ## a user defined note field
+      data       = options[:data]  ## instance specific data passed in JUDO_DATA
+      ip         = options[:elastic_ip]      ## if the ip was allocated beforehand
 
       version = options[:version]
       version ||= group.version
@@ -27,8 +27,11 @@ module Judo
       raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == @name and s != self}
 
       task("Creating server #{name}") do
-        update "name" => name, "group" => @group_name, "note" => note, "virgin" => true, "secret" => rand(2 ** 128).to_s(36), "version" => version, "data" => data, "elastic_ip" => ip
-        @base.sdb.put_attributes(@base.base_domain, "groups", @group_name => name)
+        update "name" => name,         "group" => group_name,
+               "note" => note,         "virgin" => true,
+               "secret" => new_secret, "version" => version,
+               "data" => data,         "elastic_ip" => ip
+        @base.sdb.put_attributes(@base.base_domain, "groups", group_name => name)
       end
 
       allocate_disk(snapshots)
@@ -38,7 +41,7 @@ module Judo
     end
 
     def group
-      @group ||= @base.groups.detect { |g| g.name == @group_name }
+      @group ||= @base.groups.detect { |g| g.name == group_name }
     end
 
     def fetch_state
@@ -158,7 +161,7 @@ module Judo
     end
 
     def to_s
-      "#{name}:#{@group_name}"
+      "#{name}:#{group_name}"
     end
 
     def allocate_disk(snapshots)
@@ -547,6 +550,10 @@ USER_DATA
 
     def <=>(s)
       [group.name, name] <=> [s.group.name, s.name]
+    end
+
+    def new_secret
+      rand(2 ** 128).to_s(36)
     end
 
   end
