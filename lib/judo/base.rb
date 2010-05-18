@@ -120,7 +120,7 @@ module Judo
 
     def fetch_snapshots_state
       s = {}
-      sdb.select("select * from #{snapshot_domain}")[:items].each do |group|
+      sdb.select("select * from `#{snapshot_domain}`")[:items].each do |group|
         group.each do |key,val|
           s[key] = val
         end
@@ -130,7 +130,7 @@ module Judo
 
     def fetch_servers_state
       s = {}
-      sdb.select("select * from #{server_domain}")[:items].each do |group|
+      sdb.select("select * from `#{server_domain}`")[:items].each do |group|
         group.each do |key,val|
           s[key] = val
         end
@@ -299,7 +299,7 @@ module Judo
     end
 
     def get_db_version
-      @db_version ||= [sdb.get_attributes(base_domain, "judo")[:attributes]["dbversion"]].flatten.first.to_i
+      @db_version ||= (sdb.get_attributes(base_domain, "judo")[:attributes]["dbversion"] || []).first.to_i
     end
 
     def check_version

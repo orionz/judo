@@ -72,7 +72,7 @@ default group will look something like this.
         "availability_zone":"us-east-1d"
     }
 
-Any changes you make to these files does not stick until you've committed them.
+Any changes you make to these files do not stick until you've committed them.
 To commit a group do the following.
 
     $ judo commit :default
@@ -96,7 +96,7 @@ You can stop all the servers in the :default group with:
 
 You could also have typed:
 
-  $ judo stop my_server_1 my_server_2
+    $ judo stop my_server_1 my_server_2
 
 ##  COMMANDS
 
@@ -126,7 +126,7 @@ Creates N new servers where N is an integer.  These servers have generic names
 (group.N).  Note: servers with generic names AND no external resources (like
 EBS Volumes or Elastic IPs) will be destroyed when stopped.
 
-  $ judo destroy NAME
+    $ judo destroy NAME
 
 Destroy the named server.  De-allocates any elastic IP's and destroys the EBS
 volumes.
@@ -279,21 +279,21 @@ named "keypair123" with a "keypair123.pem" file located in a subfolder named
 Specify the instance size for the server type here. See:
 http://aws.amazon.com/ec2/instance-types/
 
-  "ami32":"ami-bb709dd2",
-  "ami64":"ami-55739e3c",
-  "user":"ubuntu",
+    "ami32":"ami-bb709dd2",
+    "ami64":"ami-55739e3c",
+    "user":"ubuntu",
 
 This is where you specify the AMI's to use.  The defaults (above) are the
 ubuntu 9.10 public AMI's.  The "user" value is which user has the keypair
 bound to it for ssh'ing into the server.
 
-  "security_group":"judo",
+    "security_group":"judo",
 
 What security group to launch the server in.  A judo group is created for you
 which only has port 22 access.  Manually create new security groups as needed
 and name them here.
 
-  "availability_zone":"us-east-1d"
+    "availability_zone":"us-east-1d"
 
 What zone to launch the server in.
 
@@ -309,7 +309,9 @@ This command is very import and allows you inherit the configurations and files
 from other groups.  If you wanted to make a group called 'mysql' that was
 exactly like the default group except it installed the mysql package and ran on
 a m2.4xlarge instance type you could specify it like this:
-	{ "import : "default", "packages" : [ "mysql" ], "instance_type" : "m2.4xlarge" }
+	
+    { "import : "default", "packages" : [ "mysql" ], "instance_type" : "m2.4xlarge" }
+
 and save yourself a lot of typing.  You could further subclass by making a new
 group and importing this config.
 
@@ -493,7 +495,7 @@ was run on this specific server boot check the first line of kuzushi.log.
     ubuntu:~$ sudo head -n 1 /var/log/kuzushi.log
 
 
-== Meta
+## Meta
 
 Created by Orion Henry and Adam Wiggins. Forked from the gem 'sumo'.
 
