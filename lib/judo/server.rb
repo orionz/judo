@@ -11,7 +11,7 @@ module Judo
     def create(options)
       raise JudoError, "no group specified" unless group_name
 
-      options[:virgin] ||= true          ## setting a default
+      options[:virgin] = true if options[:virgin].nil?
 
       snapshots  = options[:snapshots]
       note       = options[:note]        ## a user defined note field
@@ -327,6 +327,7 @@ module Judo
       force_detach_volumes if force
       wait_for_volumes_detached if volumes.size > 0
       remove "instance_id"
+      update "stopped_at" => Time.now.to_i
     end
 
     def launch_ec2(boot = nil)
@@ -341,7 +342,7 @@ module Judo
         :key_name => config["key_name"],
         :group_ids => security_groups,
         :user_data => ud).first
-      update "instance_id" => result[:aws_instance_id], "virgin" => false
+      update "instance_id" => result[:aws_instance_id], "virgin" => false, "started_at" => Time.now.to_i
     end
 
     def debug(str)
@@ -497,6 +498,7 @@ module Judo
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
 export JUDO_ID='#{name}'
+export JUDO_DOMAIN='#{@base.domain}'
 export JUDO_BOOT='#{judo_boot}'
 export JUDO_DATA='#{data}'
 export SECRET='#{secret}'

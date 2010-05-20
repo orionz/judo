@@ -24,9 +24,9 @@ end
 
 module Judo
   class Base
-    attr_accessor :judo_dir, :repo, :group
+    attr_accessor :judo_dir, :repo, :group, :domain
 
-    def initialize(options)
+    def initialize(options = Judo::Base.default_options)
       @judo_dir      = options[:judo_dir]
       @repo          = options[:repo]
       @group         = options[:group]
@@ -81,7 +81,7 @@ module Judo
       sdb_domain("judo_config")
     end
 
-    def self.default_options(pwd, dir = find_judo_dir(pwd))
+    def self.default_options(pwd = Dir.pwd, dir = find_judo_dir(pwd))
       config = YAML.load File.read("#{dir}/config.yml")
       repo_dir = config["repo"] || File.dirname(dir)
       group_config = Dir["#{repo_dir}/*/config.json"].detect { |d| File.dirname(d) == pwd }

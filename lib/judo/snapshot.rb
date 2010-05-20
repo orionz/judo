@@ -113,8 +113,16 @@ module Judo
       devs.values
     end
 
+    def ec2_data
+      @base.ec2_snapshots.select { |s| ec2_ids.include? s[:aws_id] }
+    end
+
     def completed?
-      not @base.ec2_snapshots.select { |s| ec2_ids.include? s[:aws_id] }.detect { |s| s[:aws_status] != "completed" }
+      not ec2_data.detect { |s| s[:aws_status] != "completed" }
+    end
+
+    def progress
+      "#{(ec2_data.inject(0) { |sum,a| sum + a[:aws_progress].to_i } / ec2_data.size).to_i}%"
     end
 
     def size(snap_id)
