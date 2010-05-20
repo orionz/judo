@@ -1,10 +1,16 @@
 module Judo
+  ### sdb 
+  ### name { 
+  ###   "version"    => [ server.version ], 
+  ###   "devs"       => [ "/dev/sde1:snap-abc123", "/dev/sde2:snap-abc456" ],
+  ###   "server"     => server.name
+  ###   "group"      => server.group.name
+  ###   "virgin"     => server.virgin
+  ###   "note"       => server.note
+  ###   "data"       => server.data
+  ###   "created_at" => unixtime
   class Snapshot
     attr_accessor :name, :server_name
-
-    def self.domain
-      "judo_snapshots"
-    end
 
     def initialize(base, name, server_name)
       @base = base
@@ -28,8 +34,24 @@ module Judo
       get("group")
     end
 
+    def created_at
+      Time.at(get("time").to_i)
+    end
+
     def version
       get("version").to_i
+    end
+
+    def note
+      get("note")
+    end
+
+    def data
+      get("data")
+    end
+
+    def virgin
+      get("virgin").to_s == "true"
     end
 
     def devs
@@ -43,16 +65,26 @@ module Judo
         devs = server.volumes.map do |dev,vol|
           "#{dev}:#{@base.ec2.create_snapshot(vol)[:aws_id]}"
         end
-        @base.sdb.put_attributes(@base.snapshot_domain, name, { "version" => server.version, "devs" => devs, "server" => server.name, "group" => server.group.name }, :replace)
+        @base.sdb.put_attributes(@base.snapshot_domain, name, { 
+          "version" => server.version, 
+          "virgin" => server.virgin?, 
+          "note" => server.note, 
+          "data" => server.data, 
+          "devs" => devs, 
+          "server" => server.name, 
+          "group" => server.group.name,
+          "created_at" => Time.now.to_i.to_s
+        }, :replace)
         server.add "snapshots", name
       end
     end
 
-    def clone(new_server, version = self.version)
-      raise JudoError, "cannot clone, snapshotting not complete" unless completed?
+    def animate(new_server, version = self.version)
+      raise JudoError, "cannot animate, snapshotting not complete" unless completed?
       server = @base.new_server(new_server, group_name)
-      server.create( :version => version, :snapshots => devs)
+      server.create( :version => version, :snapshots => devs, :virgin => virgin, :note => note, :data => data )
       server.update "clone" => name ##, "secret" => rand(2 ** 128).to_s(36)  ## cant change this till kuzushi knows about a post-clone operation
+      server
     end
 
     def delete

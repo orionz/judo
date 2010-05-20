@@ -11,10 +11,13 @@ module Judo
     def create(options)
       raise JudoError, "no group specified" unless group_name
 
+      options[:virgin] ||= true          ## setting a default
+
       snapshots  = options[:snapshots]
-      note       = options[:note]  ## a user defined note field
-      data       = options[:data]  ## instance specific data passed in JUDO_DATA
-      ip         = options[:elastic_ip]      ## if the ip was allocated beforehand
+      note       = options[:note]        ## a user defined note field
+      data       = options[:data]        ## instance specific data passed in JUDO_DATA
+      ip         = options[:elastic_ip]  ## if the ip was allocated beforehand
+      virgin     = options[:virgin]      ## should the server init?
 
       version = options[:version]
       version ||= group.version
@@ -28,7 +31,7 @@ module Judo
 
       task("Creating server #{name}") do
         update "name" => name,         "group" => group_name,
-               "note" => note,         "virgin" => true,
+               "note" => note,         "virgin" => virgin,
                "secret" => new_secret, "version" => version,
                "data" => data,         "elastic_ip" => ip
         @base.sdb.put_attributes(@base.base_domain, "groups", group_name => name)
@@ -90,11 +93,7 @@ module Judo
 
     def kuzushi_action
       if virgin?
-        if cloned?
-          "start"
-        else
-          "init"
-        end
+        "init"
       else
         "start"
       end

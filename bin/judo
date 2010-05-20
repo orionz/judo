@@ -32,7 +32,7 @@ Usage: judo launch [options] SERVER ...
 
        judo snapshot [options] SERVER SNAPSHOT ## take an ebs snapshot of a server
        judo snapshots [options] [SERVER ...]   ## show current snapshots on servers
-       judo clone [options] SNAPSHOT SERVER    ## create a new server from a snapshot
+       judo animate [options] SNAPSHOT SERVER    ## create a new server from a snapshot
        judo erase [options] SNAPSHOT           ## erase an old snapshot
 
        judo swapip [options] SERVER SERVER     ## swap elastic IP's on the two servers
@@ -143,14 +143,14 @@ begin
       raise JudoError, "You must specify a valid server to snapshot" if servers.empty?
       raise JudoError, "You can only snapshot one server at a time" if servers.size > 1
       servers[0].snapshot(snapshot_name)
-    when "clone" then
+    when "animate" then
       snapshot_name = ARGV.shift
       raise JudoError, "You must specify a snapshot name" unless snapshot_name
       new_server = ARGV.shift
       raise JudoError, "You must specify a new server name" unless new_server
       snapshot = judo.snapshots.detect { |s| s.name == snapshot_name }
       raise JudoError, "No such snapshot #{snapshot_name}" unless snapshot
-      snapshot.clone(new_server,options[:version])
+      snapshot.animate(new_server,options[:version])
     when "destroy" then
       raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
       find_either(judo, ARGV) do |i|

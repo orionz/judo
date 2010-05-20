@@ -152,7 +152,7 @@ module JudoCommandLineHelpers
     puts "[ #{server} ]"
     printf "    %-24s: %s\n", "Group", server.group.name
     printf "    %-24s: %s\n", "Note", server.note if server.note
-    printf "    %-24s: %s\n", "Clone Of", server.clone if server.clone
+    printf "    %-24s: %s\n", "Animated From", server.clone if server.clone
     printf "    %-24s: %s\n", "Elastic Ip", server.elastic_ip if server.elastic_ip
     sub_info("EC2", server.ec2_instance) do |i|
       [:aws_instance_id, :ssh_key_name, :aws_availability_zone, :aws_state, :aws_image_id, :dns_name, :aws_instance_type, :private_dns_name, :aws_launch_time, :aws_groups ].each do |k|
