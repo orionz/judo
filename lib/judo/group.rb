@@ -123,10 +123,6 @@ module Judo
       files
     end
 
-    def keypair_file
-      extract_file(:keypair, config["key_name"] + ".pem" , {}).first
-    end
-
     def attachments(c = config)
       extract(c, {})
     end

@@ -89,7 +89,7 @@ module Judo
 
     def delete
       @base.sdb.delete_attributes(@base.snapshot_domain, name)
-      server.remove "snapshots", name
+      server.remove("snapshots", name) if server
     end
 
     def get(key)

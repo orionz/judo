@@ -33,7 +33,8 @@ module Judo
         update "name" => name,         "group" => group_name,
                "note" => note,         "virgin" => virgin,
                "secret" => new_secret, "version" => version,
-               "data" => data,         "elastic_ip" => ip
+               "data" => data,         "elastic_ip" => ip,
+               "created_at" => Time.now.to_i
         @base.sdb.put_attributes(@base.base_domain, "groups", group_name => name)
       end
 
@@ -339,7 +340,7 @@ module Judo
       result = @base.ec2.launch_instances(ami,
         :instance_type => instance_type,
         :availability_zone => config["availability_zone"],
-        :key_name => config["key_name"],
+        :key_name => @base.key_name,
         :group_ids => security_groups,
         :user_data => ud).first
       update "instance_id" => result[:aws_instance_id], "virgin" => false, "started_at" => Time.now.to_i
@@ -474,8 +475,9 @@ module Judo
 
     def connect_ssh
       wait_for_ssh
-      system "chmod 600 #{group.keypair_file}"
-      system "ssh -i #{group.keypair_file} #{config["user"]}@#{hostname}"
+      @base.keypair_file do |file|
+        system "ssh -i #{file} #{config["user"]}@#{hostname}"
+      end
     end
 
     def ec2_instance_type
