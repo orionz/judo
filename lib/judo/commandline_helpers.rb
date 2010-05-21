@@ -29,7 +29,8 @@ module JudoCommandLineHelpers
     groups.each { |group| judo_yield(group, blk) if blk }
   end
 
-  def mk_servers(judo, args, &blk)
+  ## I dont like the way this is working anymore - needs refactor
+  def mk_servers(judo, options, args, &blk)
     servers = args.map do |arg|
       name,group = split(arg)
       group ||= judo.group
@@ -37,9 +38,9 @@ module JudoCommandLineHelpers
       if name =~ /^\+(\d+)/
         count = $1.to_i
         raise JudoError, "You can batch-create between 1 and 5 servers" if count < 1 or count > 5
-        (1..count).map { judo.new_server(nil, group) }
+        (1..count).map { judo.create_server( judo.mk_server_name(group), group, options) }
       else
-        judo.new_server(name, group)
+        judo.create_server(name, group, options)
       end
     end
     servers.flatten.each { |s| judo_yield(s, blk) if blk }
@@ -150,6 +151,7 @@ module JudoCommandLineHelpers
 
   def do_info(judo, server)
     puts "[ #{server} ]"
+    printf "    %-24s: %s\n", "ID", server.id
     printf "    %-24s: %s\n", "Group", server.group.name
     printf "    %-24s: %s\n", "Note", server.note if server.note
     printf "    %-24s: %s\n", "Animated From", server.clone if server.clone

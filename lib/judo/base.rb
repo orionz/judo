@@ -152,12 +152,22 @@ module Judo
     end
 
     def servers
-      @servers ||= servers_state.map { |name,data| Judo::Server.new(self, name, data["group"].first) }
+      @servers ||= servers_state.map { |id,data| Judo::Server.new(self, id, data["group"].first) }
     end
 
-    def new_server(name, group)
-      s = Judo::Server.new(self, name, group)
+    def new_server_id
+      rand(2**32).to_s(36)
+    end
+
+    def mk_server_name(group)
+        index = servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
+        "#{group.name}.#{index}"
+    end
+
+    def create_server(name, group, options)
+      s = Judo::Server.new(self, new_server_id, group)
       servers << s
+      s.create(name, options)
       s
     end
 

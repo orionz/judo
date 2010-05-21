@@ -1,25 +1,29 @@
 module Judo
-  ### sdb 
-  ### name { 
-  ###   "version"    => [ server.version ], 
+  ### sdb
+  ### name {
+  ###   "version"    => [ server.version ],
   ###   "devs"       => [ "/dev/sde1:snap-abc123", "/dev/sde2:snap-abc456" ],
-  ###   "server"     => server.name
+  ###   "server"     => server.id
   ###   "group"      => server.group.name
   ###   "virgin"     => server.virgin
   ###   "note"       => server.note
   ###   "data"       => server.data
   ###   "created_at" => unixtime
   class Snapshot
-    attr_accessor :name, :server_name
+    attr_accessor :name, :server_id
 
-    def initialize(base, name, server_name)
+    def initialize(base, name, server_id)
       @base = base
       @name = name
-      @server_name = server_name
+      @server_id = server_id
+    end
+
+    def server_name
+      server.name rescue '(deleted)'
     end
 
     def server
-      @server ||= @base.servers.detect { |s| s.name == @server_name }
+      @server ||= @base.servers.detect { |s| s.id == server_id }
     end
 
     def fetch_state
@@ -65,13 +69,13 @@ module Judo
         devs = server.volumes.map do |dev,vol|
           "#{dev}:#{@base.ec2.create_snapshot(vol)[:aws_id]}"
         end
-        @base.sdb.put_attributes(@base.snapshot_domain, name, { 
-          "version" => server.version, 
-          "virgin" => server.virgin?, 
-          "note" => server.note, 
-          "data" => server.data, 
-          "devs" => devs, 
-          "server" => server.name, 
+        @base.sdb.put_attributes(@base.snapshot_domain, name, {
+          "version" => server.version,
+          "virgin" => server.virgin?,
+          "note" => server.note,
+          "data" => server.data,
+          "devs" => devs,
+          "server" => server.id,
           "group" => server.group.name,
           "created_at" => Time.now.to_i.to_s
         }, :replace)
@@ -79,12 +83,9 @@ module Judo
       end
     end
 
-    def animate(new_server, version = self.version)
+    def animate(new_server)
       raise JudoError, "cannot animate, snapshotting not complete" unless completed?
-      server = @base.new_server(new_server, group_name)
-      server.create( :version => version, :snapshots => devs, :virgin => virgin, :note => note, :data => data )
-      server.update "clone" => name ##, "secret" => rand(2 ** 128).to_s(36)  ## cant change this till kuzushi knows about a post-clone operation
-      server
+      @base.create_server(new_server, group_name, :version => version, :snapshots => devs, :virgin => virgin, :note => note, :data => data , :clone => name)
     end
 
     def delete

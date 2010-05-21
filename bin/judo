@@ -35,7 +35,7 @@ Usage: judo launch [options] SERVER ...
        judo animate [options] SNAPSHOT SERVER    ## create a new server from a snapshot
        judo erase [options] SNAPSHOT           ## erase an old snapshot
 
-       judo swapip [options] SERVER SERVER     ## swap elastic IP's on the two servers
+       judo swap [options] SERVER SERVER     ## swap elastic IP's and names on the two servers
 
        judo info [options] [SERVER ...]
        judo console [options] [SERVER ...] ## shows AWS console output
@@ -124,13 +124,18 @@ begin
     when "start" then find_servers(judo, ARGV)        { |s| s.start(options) }
     when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options) }
     when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options) }
-    when "create" then mk_servers(judo, ARGV)         { |s| s.create(options) }
-    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options); s.start(options) }
+    when "create" then mk_servers(judo, options, ARGV)
+    when "launch" then mk_servers(judo, options, ARGV)         { |s| s.start(options) }
     when "snapshots" then do_snapshots(judo, ARGV)
-    when "swapip" then
+    when "rename" then
+      raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2
+      old,new = ARGV
+      server = find_servers(judo, [old]).first
+      server.rename(new)
+    when "swap" then
       servers = find_servers(judo, ARGV)
       raise JudoError, "usage: judo swapip SERVER SERVER" unless servers.size == 2
-      servers[0].swapip(servers[1])
+      servers[0].swap(servers[1])
     when "erase" then
       raise JudoError, "usage: judo erase SNAPSHOT" unless ARGV.size == 1
       snapshot_name = ARGV.shift
@@ -150,7 +155,7 @@ begin
       raise JudoError, "You must specify a new server name" unless new_server
       snapshot = judo.snapshots.detect { |s| s.name == snapshot_name }
       raise JudoError, "No such snapshot #{snapshot_name}" unless snapshot
-      snapshot.animate(new_server,options[:version])
+      snapshot.animate(new_server).start(options)
     when "destroy" then
       raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
       find_either(judo, ARGV) do |i|

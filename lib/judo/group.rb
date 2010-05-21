@@ -16,12 +16,12 @@ module Judo
       @build_config ||= all_configs.reverse.inject({}) { |sum,conf| sum.merge(conf) }
     end
 
-    def server_names
-      @server_names ||= (@base.groups_config[@name] || [])
+    def server_ids
+      @server_ids ||= (@base.groups_config[@name] || [])
     end
 
     def servers
-      @base.servers.select { |s| server_names.include?(s.name) }
+      @base.servers.select { |s| server_ids.include?(s.name) }
     end
 
     def load_config
@@ -165,7 +165,7 @@ module Judo
     end
 
     def delete_server(server)
-      sdb.delete_attributes(@base.base_domain, "groups", name => server.name)
+      sdb.delete_attributes(@base.base_domain, "groups", name => server.id)
     end
 
     def to_s
