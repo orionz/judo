@@ -39,7 +39,7 @@ module Judo
     end
 
     def created_at
-      Time.at(get("time").to_i)
+      Time.at(get("created_at").to_i)
     end
 
     def version

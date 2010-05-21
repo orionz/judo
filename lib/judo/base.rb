@@ -386,9 +386,13 @@ module Judo
       raise JudoError, "You must specify a repo dir" unless repo
       task("writing .judo/config.yml") do
         Dir.chdir(repo) do
-          system "mkdir .judo"
-          File.open(".judo/config.yml","w") do |f|
-            f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
+          if File.exists?(".judo/config.yml")
+            puts ".judo folder already exists"
+          else
+            system "mkdir .judo"
+            File.open(".judo/config.yml","w") do |f|
+              f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
+            end
           end
         end
       end

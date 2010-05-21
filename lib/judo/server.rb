@@ -57,6 +57,18 @@ module Judo
       state[key] && [state[key]].flatten.first
     end
 
+    def created_at
+      Time.at(get("created_at").to_i)
+    end
+
+    def started_at
+      Time.at(get("started_at").to_i)
+    end
+
+    def stopped_at
+      Time.at(get("stopped_at").to_i)
+    end
+
     def name
       get "name"
     end
@@ -538,11 +550,12 @@ USER_DATA
     def snapshot(name)
       snap = @base.new_snapshot(name, id)
       snap.create
+      snap
     end
 
     def rename(newname)
       raise JudoError, "Already a server with that name"  if @base.servers.detect { |s| s.name == newname }
-      task("Changing name...") do
+      task("Renaming to #{newname}") do
         update "name" => newname
       end
     end
