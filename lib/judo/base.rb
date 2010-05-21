@@ -292,7 +292,7 @@ module Judo
 
     ## this is a little funny - does not work like the others - can specify bucket on cmdline or env - but if not takes from judo state
     def bucket_name
-      (@bucket_name ||= get("bucket_name")) || (raise JudoError, "no S3 bucket name specified")
+      (@bucket_name ||= get("bucket")) || (raise JudoError, "no S3 bucket name specified")
     end
 
     def set_bucket_name(new_name)
