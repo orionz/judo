@@ -37,6 +37,7 @@ Usage: judo launch [options] SERVER ...
 
        judo swap [options] SERVER SERVER     ## swap elastic IP's and names on the two servers
 
+       judo watch [options] SERVER         ## watch the server's boot process
        judo info [options] [SERVER ...]
        judo console [options] [SERVER ...] ## shows AWS console output
        judo ssh [options] [SERVER ...]     ## ssh's into the server
@@ -117,6 +118,7 @@ begin
     when "volumes" then do_volumes(judo)
     when "list" then do_list(judo, ARGV)
     when "groups" then do_groups(judo)
+    when "watch" then find_servers(judo, ARGV)        { |s| s.ssh_command("tail -n 1000 -f /var/log/kuzushi.log") }
     when "info" then find_servers(judo, ARGV)         { |s| do_info(judo, s) }
     when "console" then find_servers(judo, ARGV)      { |s| puts s.console_output }
     when "commit" then find_groups(judo, ARGV)        { |g| g.compile }

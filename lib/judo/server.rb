@@ -460,6 +460,9 @@ module Judo
       `dig +short -x #{elastic_ip}`.strip
     end
 
+## TODO: got this error once ---
+## /Library/Ruby/Gems/1.8/gems/aws-2.3.8/lib/awsbase/right_awsbase.rb:696:in `request_info_impl': VolumeInUse: vol-09c44760 is already attached to an instance (Aws::AwsError)
+
     def attach_volumes
       return unless running?
       volumes.each do |device,volume_id|
@@ -484,6 +487,13 @@ module Judo
       @base.ec2.attach_volume(volume_id, instance_id, device) if running?
 
       volume_id
+    end
+
+    def ssh_command(cmd)
+      wait_for_ssh
+      @base.keypair_file do |file|
+        system "ssh -i #{file} #{config["user"]}@#{hostname} '#{cmd}'"
+      end
     end
 
     def connect_ssh
