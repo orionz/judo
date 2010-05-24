@@ -423,17 +423,20 @@ module Judo
       if name = get("bucket_name")
         puts "Bucket #{name} already set"
       else
+        puts "Setting bucket name #{bucket_name}"
         set_bucket_name(bucket_name)
       end
     end
 
-    def setup_keypair
-      unless key_name
-        task("Generating an ssl keyapir") do
+    def setup_keypair(force = false)
+      unless key_name or force
+        task("Generating an ssl keypair") do
           name = "judo#{ec2.describe_key_pairs.map { |k| k[:aws_key_name] }.map { |k| k =~ /^judo(\d*)/; $1.to_i }.sort.last.to_i + 1}"
           material = ec2.create_key_pair(name)[:aws_material]
           set_keypair(name, material)
         end
+      else
+        puts "Already have a keypair #{key_name}"
       end
     end
 
