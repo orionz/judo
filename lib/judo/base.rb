@@ -34,6 +34,9 @@ module Judo
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
       @domain        = options[:domain]
+      @key_name      = options[:key_name]
+      @key_material  = options[:key_material]
+      @key_create    = options[:key_create]
     end
 
     def volumes
@@ -228,16 +231,18 @@ module Judo
     end
 
     def set_keypair(key_name, material)
+      @key_name = key_name
+      @key_material = material
       s3_put("#{key_name}.pem", material)
       update "key_name" => key_name
     end
 
     def key_name
-      get("key_name")
+      @key_name ||= get("key_name")
     end
 
     def key_material
-      s3_get("#{key_name}.pem")
+      @key_material ||= s3_get("#{key_name}.pem")
     end
 
     def ip_to_judo(ip)
@@ -319,7 +324,7 @@ module Judo
             set_db_version(2)
           end
         else
-          raise JduoError, "judo db is newer than the current gem - upgrade judo and try again"
+          raise JudoError, "judo db is newer than the current gem - upgrade judo and try again"
       end
     end
 
@@ -352,7 +357,7 @@ module Judo
         upgrade_db
     end
 
-    def setup
+    def setup(options = {})
       @repo ||= "." ## use cwd as default repo dir
 
       setup_sdb
@@ -428,15 +433,19 @@ module Judo
       end
     end
 
-    def setup_keypair(force = false)
-      unless key_name or force
+    def setup_keypair
+      if @key_name and @key_material
+        task("Setting keypair #{@key_name}") do
+          set_keypair(@key_name, @key_material)
+        end
+      elsif @key_create or not key_name
         task("Generating an ssl keypair") do
           name = "judo#{ec2.describe_key_pairs.map { |k| k[:aws_key_name] }.map { |k| k =~ /^judo(\d*)/; $1.to_i }.sort.last.to_i + 1}"
           material = ec2.create_key_pair(name)[:aws_material]
           set_keypair(name, material)
         end
       else
-        puts "Already have a keypair #{key_name}"
+        puts "Keypair #{key_name} already set"
       end
     end
 

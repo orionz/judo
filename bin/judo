@@ -85,6 +85,16 @@ banner
   opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|
     options[:access_id] = id
   end
+  opts.on( '-k', '--keypair KEY', 'Speicy the AWS keypair pem file to use or \'create\'' ) do |key|
+    if key == 'create'
+      options[:key_create] = true
+    elsif File.basename(key) =~ /(.*)[.]pem$/
+      options[:key_name] = $1
+      options[:key_material] = File.new(key).read
+    else
+      abort "Key file must be KEY_NAME.pem"
+    end
+  end
   opts.on( '-s', '--secret KEY', 'Specify the AWS access secret key' ) do |key|
     options[:access_secret] = key
   end
@@ -129,6 +139,10 @@ begin
     when "create" then mk_servers(judo, options, ARGV)
     when "launch" then mk_servers(judo, options, ARGV)         { |s| s.start(options) }
     when "snapshots" then do_snapshots(judo, ARGV)
+    when "config" then
+      puts "Judo DB Version: #{judo.db_version}"
+      puts "Judo Keyapir:    #{judo.key_name}"
+      puts "Judo Bucket:     #{judo.bucket_name}"
     when "rename" then
       raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2
       old,new = ARGV
