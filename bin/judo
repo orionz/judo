@@ -141,7 +141,7 @@ begin
     when "snapshots" then do_snapshots(judo, ARGV)
     when "config" then
       puts "Judo DB Version: #{judo.db_version}"
-      puts "Judo Keyapir:    #{judo.key_name}"
+      puts "Judo Keypair:    #{judo.key_name}"
       puts "Judo Bucket:     #{judo.bucket_name}"
     when "rename" then
       raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2
