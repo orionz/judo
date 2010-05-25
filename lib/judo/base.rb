@@ -8,7 +8,7 @@ module Judo
         :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
         :bucket        => ENV['JUDO_BUCKET'],
         :domain        => ENV['JUDO_DOMAIN'],
-        :repo          => Dir.pwd,
+        :repo          => ENV['JUDO_REPO'] || Dir.pwd,
         :group         => "default"
       }.delete_if { |key,value| value.nil? }
     end
