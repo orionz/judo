@@ -1,15 +1,24 @@
 module Judo
   class Base
-    attr_accessor :judo_dir, :repo, :group, :domain
+    attr_accessor :group
 
-    def initialize(options = Judo::Base.default_options)
-      @judo_dir      = options[:judo_dir]
+    def self.defaults
+      {
+        :access_id     => ENV['AWS_ACCESS_KEY_ID'],
+        :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
+        :bucket        => ENV['JUDO_BUCKET'],
+        :domain        => ENV['JUDO_DOMAIN'],
+        :repo          => Dir.pwd,
+        :group         => "default"
+      }.delete_if { |key,value| value.nil? }
+    end
+
+    def initialize(options = Judo::Base.defaults)
       @repo          = options[:repo]
-      @group         = options[:group]
-      @bucket_name   = options[:bucket]
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
       @domain        = options[:domain]
+      @group         = options[:group]
       @key_name      = options[:key_name]
       @key_material  = options[:key_material]
       @key_create    = options[:key_create]
@@ -40,12 +49,12 @@ module Judo
       end
     end
 
+    def domain
+      @domain || (raise JudoError, "no Judo domain specified")
+    end
+
     def sdb_domain(name)
-      if @domain
-        "#{@domain}_#{name}"
-      else
-        name
-      end
+      "#{domain}_#{name}"
     end
 
     def server_domain
@@ -58,40 +67,6 @@ module Judo
 
     def base_domain
       sdb_domain("judo_config")
-    end
-
-    def self.default_options(pwd = Dir.pwd, dir = find_judo_dir(pwd))
-      config = YAML.load File.read("#{dir}/config.yml")
-      repo_dir = config["repo"] || File.dirname(dir)
-      group_config = Dir["#{repo_dir}/*/config.json"].detect { |d| File.dirname(d) == pwd }
-      {
-        :judo_dir      => dir,
-        :group         => group_config ? File.basename(File.dirname(group_config)) : nil,
-        :repo          => repo_dir,
-        :domain        => (config["domain"] || ENV['JUDO_DOMAIN']),
-        :bucket        => (config["s3_bucket"] || ENV['JUDO_BUCKET']),
-        :access_id     => (config["access_id"] || ENV['AWS_ACCESS_KEY_ID']),
-        :access_secret => (config["access_secret"] || ENV['AWS_SECRET_ACCESS_KEY'])
-      }.delete_if { |key,value| value.nil? }
-    rescue Object => e
-      {
-        :access_id     => ENV['AWS_ACCESS_KEY_ID'],
-        :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
-        :bucket        => ENV['JUDO_BUCKET'],
-        :domain        => ENV['JUDO_DOMAIN'],
-      }.delete_if { |key,value| value.nil? }
-    end
-
-    def self.find_judo_dir(check)
-      if check == "/"
-        if File.exists?("#{ENV['HOME']}/.judo")
-          "#{ENV['HOME']}/.judo"
-        else
-          nil
-        end
-      else
-        File.exists?(check + "/.judo") ? check + "/.judo" : find_judo_dir(File.dirname(check))
-      end
     end
 
     def sdb
@@ -250,7 +225,7 @@ module Judo
     end
 
     def s3_key(k)
-      "#{@domain}/#{k}"
+      "#{domain}/#{k}"
     end
 
     def repo
@@ -329,14 +304,11 @@ module Judo
         upgrade_db
     end
 
-    def setup(options = {})
-      @repo ||= "." ## use cwd as default repo dir
-
+    def setup
       setup_sdb
       setup_keypair
       setup_bucket
       setup_security_group
-      setup_judo_config
       setup_repo
     end
 
@@ -352,26 +324,6 @@ module Judo
         ec2.authorize_security_group_IP_ingress("judo", 22, 22,'tcp','0.0.0.0/0')
       rescue Aws::AwsError => e
         raise unless e.message =~ /InvalidGroup.Duplicate/
-      end
-    end
-
-    def setup_judo_config
-      if judo_dir and File.exists?("#{judo_dir}/config.yml")
-        puts "config already exists [#{judo_dir}/config.yml]"
-        return
-      end
-      raise JudoError, "You must specify a repo dir" unless repo
-      task("writing .judo/config.yml") do
-        Dir.chdir(repo) do
-          if File.exists?(".judo/config.yml")
-            puts ".judo folder already exists"
-          else
-            system "mkdir .judo"
-            File.open(".judo/config.yml","w") do |f|
-              f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
-            end
-          end
-        end
       end
     end
 
