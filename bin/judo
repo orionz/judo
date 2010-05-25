@@ -6,9 +6,7 @@ require File.dirname(__FILE__) + '/../lib/judo/commandline_helpers'
 
 include JudoCommandLineHelpers
 
-defaults = Judo::Base.defaults(Dir.pwd)
-
-options = {}
+options = Judo::Base.defaults
 
 action = ARGV.shift
 
@@ -58,8 +56,7 @@ banner
   # list volumes ips
 
   opts.on( '-c', '--config DIR', 'Specify the location of the config dir' ) do |dir|
-    defaults[:judo_dir] = dir
-    defaults.merge(Judo::Base.defaults(Dir.pwd, dir))
+    options[:judo_dir] = dir
   end
   opts.on( '-f', '--force', 'Force a stop or restart (immediately force detach volumes)' ) do
     options[:force] = true
@@ -118,7 +115,7 @@ end
 
 optparse.parse!
 
-judo = Judo::Base.new(defaults.merge(options))
+judo = Judo::Base.new(options)
 judo.check_version if action != "setup"
 
 begin
