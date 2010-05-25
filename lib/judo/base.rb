@@ -1,27 +1,3 @@
-
-=begin
-module Aws
-  class Ec2
-    API_VERSION       = "2009-11-30"  ## this didnt work
-    def start_instances(instance_id)
-      link = generate_request("StartInstances",  { 'InstanceId' => instance_id } )
-      request_info(link, QEc2TerminateInstancesParser.new(:logger => @logger))
-    rescue Exception
-      on_exception
-    end
-
-    def stop_instances(instance_id)
-      link = generate_request("StopInstances",  { 'InstanceId' => instance_id } )
-      puts link.inspect
-      result = request_info(link, QEc2TerminateInstancesParser.new(:logger => @logger))
-      puts result.inspect
-    rescue Exception
-      on_exception
-    end
-  end
-end
-=end
-
 module Judo
   class Base
     attr_accessor :judo_dir, :repo, :group, :domain
@@ -274,11 +250,7 @@ module Judo
     end
 
     def s3_key(k)
-      if @domain
-        "#{@domain}/#{k}"
-      else
-        k
-      end
+      "#{@domain}/#{k}"
     end
 
     def repo
