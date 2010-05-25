@@ -59,7 +59,7 @@ module Judo
     end
 
     def devs
-      Hash[ (state["devs"] || []).map { |a| a.split(":") } ]
+      (state["devs"] || []).inject({}) { |out, kv| k, v = kv.split(':'); out[k] = v; out }
     end
 
     def create

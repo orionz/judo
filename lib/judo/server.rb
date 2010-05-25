@@ -138,7 +138,7 @@ module Judo
     end
 
     def volumes
-      Hash[ (state["volumes"] || []).map { |a| a.split(":") } ]
+      (state["volumes"] || []).inject({}) { |out, kv| k, v = kv.split(':'); out[k] = v; out }
     end
 
     def update(attrs)

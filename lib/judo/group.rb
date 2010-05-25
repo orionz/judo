@@ -54,10 +54,12 @@ module Judo
           end
           File.open("config.json", "w") { |f| f.write(new_config.to_json) }
           Dir.chdir("..") do
+            puts ""
             system "tar czvf #{tar_file} #{name}"
-            # puts "Uploading to s3..."
-            @base.s3_put(tar_file, File.new(tar_file).read)
+            puts "Uploading config to s3..."
             @base.s3_put(version_config_file, new_config.to_json)
+            puts "Uploading tar file to s3..."
+            @base.s3_put(tar_file, File.new(tar_file).read(File.stat(tar_file).size))
           end
         end
         set_version
