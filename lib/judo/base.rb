@@ -6,7 +6,6 @@ module Judo
       {
         :access_id     => ENV['AWS_ACCESS_KEY_ID'],
         :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
-        :bucket        => ENV['JUDO_BUCKET'],
         :domain        => ENV['JUDO_DOMAIN'],
         :repo          => ENV['JUDO_REPO'] || Dir.pwd,
         :group         => "default"
@@ -18,7 +17,6 @@ module Judo
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
       @domain        = options[:domain]
-      @bucket_name   = options[:bucket]
       @group         = options[:group]
       @key_name      = options[:key_name]
       @key_material  = options[:key_material]
@@ -214,19 +212,15 @@ module Judo
     end
 
     def s3_url(k)
-      Aws::S3Generator::Key.new(bucket, s3_key(k)).get
+      Aws::S3Generator::Key.new(bucket, k).get
     end
 
     def s3_get(k)
-      bucket.get( s3_key(k))
+      bucket.get(k)
     end
 
     def s3_put(k, file)
-      bucket.put( s3_key(k), file)
-    end
-
-    def s3_key(k)
-      "#{domain}/#{k}"
+      bucket.put(k, file)
     end
 
     def repo
@@ -243,14 +237,8 @@ module Judo
       @access_secret || (raise JudoError, "no AWS Secret Key specified")
     end
 
-    ## this is a little funny - does not work like the others - can specify bucket on cmdline or env - but if not takes from judo state
     def bucket_name
-      (@bucket_name ||= get("bucket")) || (raise JudoError, "no S3 bucket name specified")
-    end
-
-    def set_bucket_name(new_name)
-      @bucket_name = new_name
-      update "bucket" => @bucket_name
+      "#{domain}_judo"
     end
 
     def db_version
@@ -308,7 +296,6 @@ module Judo
     def setup
       setup_sdb
       setup_keypair
-      setup_bucket
       setup_security_group
       setup_repo
     end
@@ -346,15 +333,6 @@ module Judo
         file.write key_material
         file.flush
         blk.call(file.path)
-      end
-    end
-
-    def setup_bucket
-      if name = get("bucket_name")
-        puts "Bucket #{name} already set"
-      else
-        puts "Setting bucket name #{bucket_name}"
-        set_bucket_name(bucket_name)
       end
     end
 
