@@ -18,6 +18,7 @@ module Judo
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
       @domain        = options[:domain]
+      @bucket_name   = options[:bucket]
       @group         = options[:group]
       @key_name      = options[:key_name]
       @key_material  = options[:key_material]
