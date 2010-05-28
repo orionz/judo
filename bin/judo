@@ -10,9 +10,7 @@ defaults = Judo::Base.default_options(Dir.pwd)
 
 options = {}
 
-action = ARGV.shift
-
-ARGV.unshift "-h" unless action
+ARGV.unshift "-h" if ARGV.size == 0
 
 optparse = OptionParser.new do|opts|
   opts.banner = <<banner
@@ -118,6 +116,7 @@ end
 
 optparse.parse!
 
+action = ARGV.shift
 judo = Judo::Base.new(defaults.merge(options))
 judo.check_version if action != "setup"
 
