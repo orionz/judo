@@ -6,6 +6,7 @@ require 'fileutils'
 require 'yaml'
 require 'json'
 require 'pp'
+require 'tempfile'
 
 raise "Judo Currently Requires Ruby 1.8.7" unless RUBY_VERSION == "1.8.7"
 

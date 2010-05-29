@@ -24,9 +24,9 @@ end
 
 module Judo
   class Base
-    attr_accessor :judo_dir, :repo, :group
+    attr_accessor :judo_dir, :repo, :group, :domain
 
-    def initialize(options)
+    def initialize(options = Judo::Base.default_options)
       @judo_dir      = options[:judo_dir]
       @repo          = options[:repo]
       @group         = options[:group]
@@ -34,6 +34,9 @@ module Judo
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
       @domain        = options[:domain]
+      @key_name      = options[:key_name]
+      @key_material  = options[:key_material]
+      @key_create    = options[:key_create]
     end
 
     def volumes
@@ -81,7 +84,7 @@ module Judo
       sdb_domain("judo_config")
     end
 
-    def self.default_options(pwd, dir = find_judo_dir(pwd))
+    def self.default_options(pwd = Dir.pwd, dir = find_judo_dir(pwd))
       config = YAML.load File.read("#{dir}/config.yml")
       repo_dir = config["repo"] || File.dirname(dir)
       group_config = Dir["#{repo_dir}/*/config.json"].detect { |d| File.dirname(d) == pwd }
@@ -152,12 +155,22 @@ module Judo
     end
 
     def servers
-      @servers ||= servers_state.map { |name,data| Judo::Server.new(self, name, data["group"].first) }
+      @servers ||= servers_state.map { |id,data| Judo::Server.new(self, id, data["group"].first) }
     end
 
-    def new_server(name, group)
-      s = Judo::Server.new(self, name, group)
+    def new_server_id
+      rand(2**32).to_s(36)
+    end
+
+    def mk_server_name(group)
+        index = servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
+        "#{group.name}.#{index}"
+    end
+
+    def create_server(name, group, options)
+      s = Judo::Server.new(self, new_server_id, group)
       servers << s
+      s.create(name, options)
       s
     end
 
@@ -217,6 +230,21 @@ module Judo
       @group_version ||= sdb.get_attributes(base_domain, "group_versions")[:attributes]
     end
 
+    def set_keypair(key_name, material)
+      @key_name = key_name
+      @key_material = material
+      s3_put("#{key_name}.pem", material)
+      update "key_name" => key_name
+    end
+
+    def key_name
+      @key_name ||= get("key_name")
+    end
+
+    def key_material
+      @key_material ||= s3_get("#{key_name}.pem")
+    end
+
     def ip_to_judo(ip)
       servers.detect { |s| s.elastic_ip == ip }
     end
@@ -267,8 +295,14 @@ module Judo
       @access_secret || (raise JudoError, "no AWS Secret Key specified")
     end
 
+    ## this is a little funny - does not work like the others - can specify bucket on cmdline or env - but if not takes from judo state
     def bucket_name
-      @bucket_name || (raise JudoError, "no S3 bucket name specified")
+      (@bucket_name ||= get("bucket")) || (raise JudoError, "no S3 bucket name specified")
+    end
+
+    def set_bucket_name(new_name)
+      @bucket_name = new_name
+      update "bucket" => @bucket_name
     end
 
     def db_version
@@ -295,12 +329,25 @@ module Judo
     end
 
     def set_db_version(new_version)
-      @db_version = new_version
-      sdb.put_attributes(base_domain, "judo", { "dbversion" => new_version }, :replace)
+      update "dbversion" => new_version
     end
 
     def get_db_version
-      @db_version ||= (sdb.get_attributes(base_domain, "judo")[:attributes]["dbversion"] || []).first.to_i
+      get("dbversion").to_i
+    end
+
+    def get(key)
+      state[key] && [state[key]].flatten.first
+    end
+
+    ## i'm copy pasting code from server - this needs to be its own module
+    def update(attrs)
+      sdb.put_attributes(base_domain, "judo", attrs, :replace)
+      state.merge! attrs
+    end
+
+    def state
+      @state ||= sdb.get_attributes(base_domain, "judo")[:attributes]
     end
 
     def check_version
@@ -310,16 +357,15 @@ module Judo
         upgrade_db
     end
 
-    def setup
-      ## no need to setup bucket
-
+    def setup(options = {})
       @repo ||= "." ## use cwd as default repo dir
 
       setup_sdb
+      setup_keypair
+      setup_bucket
       setup_security_group
       setup_judo_config
       setup_repo
-      get_group("default").compile
     end
 
     def setup_sdb
@@ -345,9 +391,13 @@ module Judo
       raise JudoError, "You must specify a repo dir" unless repo
       task("writing .judo/config.yml") do
         Dir.chdir(repo) do
-          system "mkdir .judo"
-          File.open(".judo/config.yml","w") do |f|
-            f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
+          if File.exists?(".judo/config.yml")
+            puts ".judo folder already exists"
+          else
+            system "mkdir .judo"
+            File.open(".judo/config.yml","w") do |f|
+              f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
+            end
           end
         end
       end
@@ -360,22 +410,48 @@ module Judo
       end
       task("Setting up default group") do
         Dir.chdir(repo) do
-          system "mkdir -p default/keypairs"
-
-          @keypair = "judo#{ec2.describe_key_pairs.map { |k| k[:aws_key_name] }.map { |k| k =~ /^judo(\d*)/; $1.to_i }.sort.last.to_i + 1}"
-          material = ec2.create_key_pair(@keypair)[:aws_material]
-
-          File.open("default/keypairs/#{@keypair}.pem", 'w') { |f| f.write material }
-          File.chmod 0600, "default/keypairs/#{@keypair}.pem"
           File.open("default/config.json","w") { |f| f.write default_config }
         end
+        get_group("default").compile
+      end
+    end
+
+    def keypair_file(&blk)
+      Tempfile.open("judo_pem") do |file|
+        file.write key_material
+        file.flush
+        blk.call(file.path)
+      end
+    end
+
+    def setup_bucket
+      if name = get("bucket_name")
+        puts "Bucket #{name} already set"
+      else
+        puts "Setting bucket name #{bucket_name}"
+        set_bucket_name(bucket_name)
+      end
+    end
+
+    def setup_keypair
+      if @key_name and @key_material
+        task("Setting keypair #{@key_name}") do
+          set_keypair(@key_name, @key_material)
+        end
+      elsif @key_create or not key_name
+        task("Generating an ssl keypair") do
+          name = "judo#{ec2.describe_key_pairs.map { |k| k[:aws_key_name] }.map { |k| k =~ /^judo(\d*)/; $1.to_i }.sort.last.to_i + 1}"
+          material = ec2.create_key_pair(name)[:aws_material]
+          set_keypair(name, material)
+        end
+      else
+        puts "Keypair #{key_name} already set"
       end
     end
 
     def default_config
         <<DEFAULT
 {
-  "key_name":"#{@keypair}",
   "instance_type":"m1.small",
   "ami32":"ami-bb709dd2", // public ubuntu 9.10 ami - 32 bit
   "ami64":"ami-55739e3c", // public ubuntu 9.10 ami - 64 bit

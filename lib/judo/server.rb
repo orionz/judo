@@ -1,37 +1,38 @@
 module Judo
   class Server
-    attr_accessor :name, :group_name
+    attr_accessor :id,:group_name
 
-    def initialize(base, name, group, version = nil)
+    def initialize(base, id, group, version = nil)
       @base = base
-      @name = name
+      @id = id
       @group_name = group
     end
 
-    def create(options)
+    def create(name, options)
       raise JudoError, "no group specified" unless group_name
 
+      options[:virgin] = true if options[:virgin].nil?
+
       snapshots  = options[:snapshots]
-      note       = options[:note]  ## a user defined note field
-      data       = options[:data]  ## instance specific data passed in JUDO_DATA
-      ip         = options[:elastic_ip]      ## if the ip was allocated beforehand
+      note       = options[:note]        ## a user defined note field
+      data       = options[:data]        ## instance specific data passed in JUDO_DATA
+      ip         = options[:elastic_ip]  ## if the ip was allocated beforehand
+      virgin     = options[:virgin]      ## should the server init?
+      clone      = options[:clone]       ## if it was cloned from a snapshot
 
       version = options[:version]
       version ||= group.version
 
-      if @name.nil?
-        index = @base.servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
-        @name = "#{group.name}.#{index}"
-      end
-
-      raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == @name and s != self}
+      raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == name and s != self}
+      raise JudoError, "there is already a server with id #{id}" if @base.servers.detect { |s| s.id == id and s != self}
 
       task("Creating server #{name}") do
         update "name" => name,         "group" => group_name,
-               "note" => note,         "virgin" => true,
+               "note" => note,         "virgin" => virgin,
                "secret" => new_secret, "version" => version,
-               "data" => data,         "elastic_ip" => ip
-        @base.sdb.put_attributes(@base.base_domain, "groups", group_name => name)
+               "data" => data,         "elastic_ip" => ip,
+               "clone" => clone,       "created_at" => Time.now.to_i
+        @base.sdb.put_attributes(@base.base_domain, "groups", group_name => id)
       end
 
       allocate_disk(snapshots)
@@ -45,15 +46,31 @@ module Judo
     end
 
     def fetch_state
-      @base.sdb.get_attributes(@base.server_domain, name)[:attributes]
+      @base.sdb.get_attributes(@base.server_domain, id)[:attributes]
     end
 
     def state
-      @base.servers_state[name] ||= fetch_state
+      @base.servers_state[id] ||= fetch_state
     end
 
     def get(key)
       state[key] && [state[key]].flatten.first
+    end
+
+    def created_at
+      Time.at(get("created_at").to_i)
+    end
+
+    def started_at
+      Time.at(get("started_at").to_i)
+    end
+
+    def stopped_at
+      Time.at(get("stopped_at").to_i)
+    end
+
+    def name
+      get "name"
     end
 
     def data
@@ -90,11 +107,7 @@ module Judo
 
     def kuzushi_action
       if virgin?
-        if cloned?
-          "start"
-        else
-          "init"
-        end
+        "init"
       else
         "start"
       end
@@ -129,28 +142,28 @@ module Judo
     end
 
     def update(attrs)
-      @base.sdb.put_attributes(@base.server_domain, name, attrs, :replace)
+      @base.sdb.put_attributes(@base.server_domain, id, attrs, :replace)
       state.merge! attrs
     end
 
     def add(key, value)
-      @base.sdb.put_attributes(@base.server_domain, name, { key => value })
+      @base.sdb.put_attributes(@base.server_domain, id, { key => value })
       (state[key] ||= []) << value
     end
 
     def remove(key, value = nil)
       if value
-        @base.sdb.delete_attributes(@base.server_domain, name, key => value)
+        @base.sdb.delete_attributes(@base.server_domain, id, key => value)
         state[key] - [value]
       else
-        @base.sdb.delete_attributes(@base.server_domain, name, [ key ])
+        @base.sdb.delete_attributes(@base.server_domain, id, [ key ])
         state.delete(key)
       end
     end
 
     def delete
       group.delete_server(self) if group
-      @base.sdb.delete_attributes(@base.server_domain, name)
+      @base.sdb.delete_attributes(@base.server_domain, id)
     end
 
 ######## end simple DB access  #######
@@ -328,6 +341,7 @@ module Judo
       force_detach_volumes if force
       wait_for_volumes_detached if volumes.size > 0
       remove "instance_id"
+      update "stopped_at" => Time.now.to_i
     end
 
     def launch_ec2(boot = nil)
@@ -339,10 +353,10 @@ module Judo
       result = @base.ec2.launch_instances(ami,
         :instance_type => instance_type,
         :availability_zone => config["availability_zone"],
-        :key_name => config["key_name"],
+        :key_name => @base.key_name,
         :group_ids => security_groups,
         :user_data => ud).first
-      update "instance_id" => result[:aws_instance_id], "virgin" => false
+      update "instance_id" => result[:aws_instance_id], "virgin" => false, "started_at" => Time.now.to_i
     end
 
     def debug(str)
@@ -446,6 +460,9 @@ module Judo
       `dig +short -x #{elastic_ip}`.strip
     end
 
+## TODO: got this error once ---
+## /Library/Ruby/Gems/1.8/gems/aws-2.3.8/lib/awsbase/right_awsbase.rb:696:in `request_info_impl': VolumeInUse: vol-09c44760 is already attached to an instance (Aws::AwsError)
+
     def attach_volumes
       return unless running?
       volumes.each do |device,volume_id|
@@ -472,10 +489,18 @@ module Judo
       volume_id
     end
 
+    def ssh_command(cmd)
+      wait_for_ssh
+      @base.keypair_file do |file|
+        system "ssh -i #{file} #{config["user"]}@#{hostname} '#{cmd}'"
+      end
+    end
+
     def connect_ssh
       wait_for_ssh
-      system "chmod 600 #{group.keypair_file}"
-      system "ssh -i #{group.keypair_file} #{config["user"]}@#{hostname}"
+      @base.keypair_file do |file|
+        system "ssh -i #{file} #{config["user"]}@#{hostname}"
+      end
     end
 
     def ec2_instance_type
@@ -488,7 +513,7 @@ module Judo
 
     def reload
       @base.reload_ec2_instances
-      @base.servers_state.delete(name)
+      @base.servers_state.delete(id)
     end
 
     def user_data(judo_boot = nil)
@@ -497,7 +522,9 @@ module Judo
 
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
-export JUDO_ID='#{name}'
+export JUDO_ID='#{id}'
+export JUDO_NAME='#{name}'
+export JUDO_DOMAIN='#{@base.domain}'
 export JUDO_BOOT='#{judo_boot}'
 export JUDO_DATA='#{data}'
 export SECRET='#{secret}'
@@ -531,13 +558,22 @@ USER_DATA
     end
 
     def snapshot(name)
-      snap = @base.new_snapshot(name, self.name)
+      snap = @base.new_snapshot(name, id)
       snap.create
+      snap
     end
 
-    def swapip(other)
+    def rename(newname)
+      raise JudoError, "Already a server with that name"  if @base.servers.detect { |s| s.name == newname }
+      task("Renaming to #{newname}") do
+        update "name" => newname
+      end
+    end
+
+    def swap(other)
       ip1 = elastic_ip
       ip2 = other.elastic_ip
+
       raise JudoError, "Server must have an elastic IP to swap" unless ip1 and ip2
 
       task("Swapping Ip Addresses") do
@@ -549,6 +585,13 @@ USER_DATA
 
         update "elastic_ip" => ip2
         other.update "elastic_ip" => ip1
+      end
+
+      task("Swapping Names") do
+        name1 = name
+        name2 = other.name
+        update "name" => name2
+        other.update "name" => name1
       end
     end
 

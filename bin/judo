@@ -32,11 +32,12 @@ Usage: judo launch [options] SERVER ...
 
        judo snapshot [options] SERVER SNAPSHOT ## take an ebs snapshot of a server
        judo snapshots [options] [SERVER ...]   ## show current snapshots on servers
-       judo clone [options] SNAPSHOT SERVER    ## create a new server from a snapshot
+       judo animate [options] SNAPSHOT SERVER    ## create a new server from a snapshot
        judo erase [options] SNAPSHOT           ## erase an old snapshot
 
-       judo swapip [options] SERVER SERVER     ## swap elastic IP's on the two servers
+       judo swap [options] SERVER SERVER     ## swap elastic IP's and names on the two servers
 
+       judo watch [options] SERVER         ## watch the server's boot process
        judo info [options] [SERVER ...]
        judo console [options] [SERVER ...] ## shows AWS console output
        judo ssh [options] [SERVER ...]     ## ssh's into the server
@@ -84,6 +85,16 @@ banner
   opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|
     options[:access_id] = id
   end
+  opts.on( '-k', '--keypair KEY', 'Speicy the AWS keypair pem file to use or \'create\'' ) do |key|
+    if key == 'create'
+      options[:key_create] = true
+    elsif File.basename(key) =~ /(.*)[.]pem$/
+      options[:key_name] = $1
+      options[:key_material] = File.new(key).read
+    else
+      abort "Key file must be KEY_NAME.pem"
+    end
+  end
   opts.on( '-s', '--secret KEY', 'Specify the AWS access secret key' ) do |key|
     options[:access_secret] = key
   end
@@ -117,6 +128,7 @@ begin
     when "volumes" then do_volumes(judo)
     when "list" then do_list(judo, ARGV)
     when "groups" then do_groups(judo)
+    when "watch" then find_servers(judo, ARGV)        { |s| s.ssh_command("tail -n 1000 -f /var/log/kuzushi.log") }
     when "info" then find_servers(judo, ARGV)         { |s| do_info(judo, s) }
     when "console" then find_servers(judo, ARGV)      { |s| puts s.console_output }
     when "commit" then find_groups(judo, ARGV)        { |g| g.compile }
@@ -124,13 +136,22 @@ begin
     when "start" then find_servers(judo, ARGV)        { |s| s.start(options) }
     when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options) }
     when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options) }
-    when "create" then mk_servers(judo, ARGV)         { |s| s.create(options) }
-    when "launch" then mk_servers(judo, ARGV)         { |s| s.create(options); s.start(options) }
+    when "create" then mk_servers(judo, options, ARGV)
+    when "launch" then mk_servers(judo, options, ARGV)         { |s| s.start(options) }
     when "snapshots" then do_snapshots(judo, ARGV)
-    when "swapip" then
+    when "config" then
+      puts "Judo DB Version: #{judo.db_version}"
+      puts "Judo Keyapir:    #{judo.key_name}"
+      puts "Judo Bucket:     #{judo.bucket_name}"
+    when "rename" then
+      raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2
+      old,new = ARGV
+      server = find_servers(judo, [old]).first
+      server.rename(new)
+    when "swap" then
       servers = find_servers(judo, ARGV)
       raise JudoError, "usage: judo swapip SERVER SERVER" unless servers.size == 2
-      servers[0].swapip(servers[1])
+      servers[0].swap(servers[1])
     when "erase" then
       raise JudoError, "usage: judo erase SNAPSHOT" unless ARGV.size == 1
       snapshot_name = ARGV.shift
@@ -143,14 +164,14 @@ begin
       raise JudoError, "You must specify a valid server to snapshot" if servers.empty?
       raise JudoError, "You can only snapshot one server at a time" if servers.size > 1
       servers[0].snapshot(snapshot_name)
-    when "clone" then
+    when "animate" then
       snapshot_name = ARGV.shift
       raise JudoError, "You must specify a snapshot name" unless snapshot_name
       new_server = ARGV.shift
       raise JudoError, "You must specify a new server name" unless new_server
       snapshot = judo.snapshots.detect { |s| s.name == snapshot_name }
       raise JudoError, "No such snapshot #{snapshot_name}" unless snapshot
-      snapshot.clone(new_server,options[:version])
+      snapshot.animate(new_server).start(options)
     when "destroy" then
       raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
       find_either(judo, ARGV) do |i|

@@ -16,12 +16,12 @@ module Judo
       @build_config ||= all_configs.reverse.inject({}) { |sum,conf| sum.merge(conf) }
     end
 
-    def server_names
-      @server_names ||= (@base.groups_config[@name] || [])
+    def server_ids
+      @server_ids ||= (@base.groups_config[@name] || [])
     end
 
     def servers
-      @base.servers.select { |s| server_names.include?(s.name) }
+      @base.servers.select { |s| server_ids.include?(s.name) }
     end
 
     def load_config
@@ -54,7 +54,7 @@ module Judo
           end
           File.open("config.json", "w") { |f| f.write(new_config.to_json) }
           Dir.chdir("..") do
-            system "tar czf #{tar_file} #{name}"
+            system "tar czvf #{tar_file} #{name}"
             # puts "Uploading to s3..."
             @base.s3_put(tar_file, File.new(tar_file).read)
             @base.s3_put(version_config_file, new_config.to_json)
@@ -123,10 +123,6 @@ module Judo
       files
     end
 
-    def keypair_file
-      extract_file(:keypair, config["key_name"] + ".pem" , {}).first
-    end
-
     def attachments(c = config)
       extract(c, {})
     end
@@ -169,7 +165,7 @@ module Judo
     end
 
     def delete_server(server)
-      sdb.delete_attributes(@base.base_domain, "groups", name => server.name)
+      sdb.delete_attributes(@base.base_domain, "groups", name => server.id)
     end
 
     def to_s
