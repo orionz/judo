@@ -1,27 +1,3 @@
-
-=begin
-module Aws
-  class Ec2
-    API_VERSION       = "2009-11-30"  ## this didnt work
-    def start_instances(instance_id)
-      link = generate_request("StartInstances",  { 'InstanceId' => instance_id } )
-      request_info(link, QEc2TerminateInstancesParser.new(:logger => @logger))
-    rescue Exception
-      on_exception
-    end
-
-    def stop_instances(instance_id)
-      link = generate_request("StopInstances",  { 'InstanceId' => instance_id } )
-      puts link.inspect
-      result = request_info(link, QEc2TerminateInstancesParser.new(:logger => @logger))
-      puts result.inspect
-    rescue Exception
-      on_exception
-    end
-  end
-end
-=end
-
 module Judo
   class Base
     attr_accessor :judo_dir, :repo, :group, :domain
@@ -453,8 +429,8 @@ module Judo
         <<DEFAULT
 {
   "instance_type":"m1.small",
-  "ami32":"ami-bb709dd2", // public ubuntu 9.10 ami - 32 bit
-  "ami64":"ami-55739e3c", // public ubuntu 9.10 ami - 64 bit
+  "ami32":"ami-2d4aa444", // public ubuntu 10.04 ami - 32 bit
+  "ami64":"ami-fd4aa494", // public ubuntu 10.04 ami - 64 bit
   "user":"ubuntu",
   "security_group":"judo",
   "availability_zone":"us-east-1d"
