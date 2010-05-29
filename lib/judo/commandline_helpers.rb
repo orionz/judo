@@ -135,7 +135,7 @@ module JudoCommandLineHelpers
     printf "  SERVERS\n"
     printf "%s\n", ("-" * 80)
     servers.sort.each do |s|
-      printf "%-32s %-12s %-7s %-11s %-11s %-10s %-3s %s\n", s.name, s.group.name, s.version_desc, s.state["instance_id"], s.size_desc, s.ec2_state, "ebs:#{s.volumes.keys.size}", s.has_ip? ? "ip" : ""
+      printf "%-32s %-12s %-7s %-11s %-11s %-10s %-3s %s\n", s.name, s.group.name, s.version_desc, s.get("instance_id"), s.size_desc, s.ec2_state, "ebs:#{s.volumes.keys.size}", s.has_ip? ? "ip" : ""
     end
   end
 

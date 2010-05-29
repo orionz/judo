@@ -10,9 +10,7 @@ defaults = Judo::Base.default_options(Dir.pwd)
 
 options = {}
 
-action = ARGV.shift
-
-ARGV.unshift "-h" unless action
+ARGV.unshift "-h" if ARGV.size == 0
 
 optparse = OptionParser.new do|opts|
   opts.banner = <<banner
@@ -118,6 +116,7 @@ end
 
 optparse.parse!
 
+action = ARGV.shift
 judo = Judo::Base.new(defaults.merge(options))
 judo.check_version if action != "setup"
 
@@ -141,7 +140,7 @@ begin
     when "snapshots" then do_snapshots(judo, ARGV)
     when "config" then
       puts "Judo DB Version: #{judo.db_version}"
-      puts "Judo Keyapir:    #{judo.key_name}"
+      puts "Judo Key Pair:   #{judo.key_name}"
       puts "Judo Bucket:     #{judo.bucket_name}"
     when "rename" then
       raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2

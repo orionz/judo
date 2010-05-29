@@ -53,10 +53,6 @@ module Judo
       @base.servers_state[id] ||= fetch_state
     end
 
-    def get(key)
-      state[key] && [state[key]].flatten.first
-    end
-
     def created_at
       Time.at(get("created_at").to_i)
     end
@@ -138,7 +134,13 @@ module Judo
     end
 
     def volumes
-      Hash[ (state["volumes"] || []).map { |a| a.split(":") } ]
+      (state["volumes"] || []).inject({}) { |out, kv| k, v = kv.split(':'); out[k] = v; out }
+    end
+
+######## begin simple DB access  #######
+
+    def get(key)
+      state[key] && [state[key]].flatten.first
     end
 
     def update(attrs)
@@ -528,12 +530,20 @@ export JUDO_DOMAIN='#{@base.domain}'
 export JUDO_BOOT='#{judo_boot}'
 export JUDO_DATA='#{data}'
 export SECRET='#{secret}'
+export JUDO_FIRSTBOOT='#{virgin?}'
+
 apt-get update
-apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby -y
+apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby curl -y
+
 gem install kuzushi --no-rdoc --no-ri
-GEM_BIN=`ruby -r rubygems -e "puts Gem.bindir"`
-echo "$GEM_BIN/kuzushi #{virgin? && "init" || "start"} '#{url}'" > /var/log/kuzushi.log
-$GEM_BIN/kuzushi #{virgin? && "init" || "start"} '#{url}' >> /var/log/kuzushi.log 2>&1
+export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH
+export LOG=/var/log/kuzushi.log
+
+cd /tmp/ ; curl --silent '#{url}' | tar xvz ; cd #{group.name}
+
+kuzushi-setup >> $LOG
+bash setup.sh >> $LOG
+
 USER_DATA
     end
 

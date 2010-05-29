@@ -8,8 +8,6 @@ require 'json'
 require 'pp'
 require 'tempfile'
 
-raise "Judo Currently Requires Ruby 1.8.7" unless RUBY_VERSION == "1.8.7"
-
 class JudoError < RuntimeError ; end
 class JudoInvalid < RuntimeError ; end
 
