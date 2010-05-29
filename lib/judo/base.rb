@@ -290,7 +290,7 @@ module Judo
             set_db_version(2)
           end
         else
-          raise JduoError, "judo db is newer than the current gem - upgrade judo and try again"
+          raise JudoError, "judo db is newer than the current gem - upgrade judo and try again"
       end
     end
 
