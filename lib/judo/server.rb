@@ -536,7 +536,7 @@ apt-get update
 apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby curl -y
 
 gem install kuzushi --no-rdoc --no-ri
-export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH
+echo 'export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH' >> /etc/profile ; . /etc/profile
 export LOG=/var/log/kuzushi.log
 
 cd /tmp/ ; curl --silent '#{url}' | tar xvz ; cd #{group.name}
