@@ -205,7 +205,7 @@ module Judo
 
     def instance_type
      ## need instance_size to be backward compatible - needed for configs made before v 0.3.0
-     get("instance_type") || config["instance_type"] || config["instance_size"]
+     get("instance_type") || config["instance_type"] || config["instance_size"] || "m1.small"
     end
 
     def config
