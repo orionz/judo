@@ -54,7 +54,7 @@ module Judo
     end
 
     def encode_metadata(data)
-      data.inject({}) { |buf,(key,value)| buf["metadata_#{key.to_s}"] = "string:#{value.to_s}"; buf }
+      data.inject({}) { |buf,(key,value)| buf["metadata_#{key.to_s}"] = [value].to_json; buf }
     end
 
     def metadata
@@ -64,12 +64,7 @@ module Judo
     def get_metadata
       state.inject({}) do |buf,(key,value)|
         if key =~ /^metadata_(.*)/
-          meta_key = $1
-          if value.first =~ /^string:(.*)/
-            buf[meta_key] = $1
-          else
-            raise JudoError, "Invalid key value format in metadata #{key} #{value}"
-          end
+          buf[$1] = JSON.load(value.first)
         end
         buf
       end
