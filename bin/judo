@@ -68,14 +68,16 @@ banner
   opts.on( '-r', '--repo DIR', 'Specify the location of the repo dir' ) do |dir|
     options[:repo] = dir
   end
-  opts.on( '-D', '--data DATA', 'Specify an instance specific string to be used during boot on create or launch' ) do |data|
-    options[:data] = data
-  end
   opts.on( '-t', '--type TYPE', 'Specify an instance type different from the config on server start' ) do |type|
     options[:instance_type] = type
   end
-  opts.on( '-B', '--boot BOOT', 'Instance specific string (like --data) but for this boot only' ) do |data|
-    options[:boot] = data
+  opts.on( '-D', '--data KEY=VALUE', 'Specify metadata to attach to a server at creation time' ) do |data|
+    key,value = data.split("=")
+    (options[:metadata] ||= {})[key] = value
+  end
+  opts.on( '-B', '--boot KEY=VALUE', 'Specify special boot parameters' ) do |data|
+    key,value = data.split("=")
+    (options[:boot] ||= {})[key] = value
   end
   opts.on( '-i', '--ip IP', 'Specify an exsiting elastic_ip address on server creation' ) do |ip|
     options[:elastic_ip] = ip
@@ -101,9 +103,6 @@ banner
   end
   opts.on( '-g', '--group GROUP', 'Specify the default group of the repo dir' ) do |group|
     options[:group] = group
-  end
-  opts.on( '-n', '--note NOTE', 'Add a note to a server as you create or launch it') do |note|
-    options[:note] = note
   end
   opts.on( '-v', '--version VERSION', 'Update the servers config version on create/start/launch' ) do |version|
     options[:version] = version

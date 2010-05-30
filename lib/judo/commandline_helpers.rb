@@ -161,6 +161,9 @@ module JudoCommandLineHelpers
         printf "    %-24s: %s\n",k, i[k]
       end
     end
+    sub_info("METADATA", server.metadata.keys) do |key|
+      printf("    %-24s: %s\n", key, server.metadata[key] )
+    end
     sub_info("VOLUMES", server.ec2_volumes) do |v|
       printf "    %-13s %-10s %-10s %4d  %-10s %-8s\n",
       v[:aws_id],

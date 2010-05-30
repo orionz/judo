@@ -1,0 +1,37 @@
+#!/bin/bash
+<% 
+
+## the variables available for use in the erb are as follows
+
+##   id - this is random string that uniqily identifies the server for its lifetime
+##   name - the name of the server
+##   group_name - the name of group the server is in
+##   domain - this is the JUDO_DOMAIN currently running
+##   secret - this is a 128bit random string assigned to an instance at creation time - great for passwords
+##   metadata - a hash of metadata associated with the server with --data KEY=VALUE
+##   boot - a hash of boot options passed to the server with --boot KEY=VALUE
+##   first_boot? - is set to true or false depending on if this is the instance's first boot
+##   url - the URL to the group verson file in the s3 bucket
+
+%>
+
+export JUDO_ID='<%= id %>'
+export JUDO_NAME='<%= name %>'
+export JUDO_DOMAIN='<%= domain %>'
+export JUDO_SECRET='<%= secret %>'
+export JUDO_FIRST_BOOT='<%= first_boot? %>'
+
+export DEBIAN_FRONTEND="noninteractive"
+export DEBIAN_PRIORITY="critical"
+apt-get update
+apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby curl -y
+
+gem install kuzushi --no-rdoc --no-ri --version
+echo 'export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH' >> /etc/profile ; . /etc/profile
+export LOG=/var/log/kuzushi.log
+
+cd /tmp/ ; curl --silent '<%= url %>' | tar xvz ; cd <%= group_name %>
+
+kuzushi-setup >> $LOG
+bash setup.sh >> $LOG
+

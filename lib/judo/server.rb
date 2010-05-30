@@ -1,11 +1,12 @@
 module Judo
   class Server
-    attr_accessor :id,:group_name
+    attr_accessor :id
 
     def initialize(base, id, group, version = nil)
       @base = base
       @id = id
-      @group_name = group
+      @group = group
+      @judo_domain = base.domain
     end
 
     def create(name, options)
@@ -14,8 +15,7 @@ module Judo
       options[:virgin] = true if options[:virgin].nil?
 
       snapshots  = options[:snapshots]
-      note       = options[:note]        ## a user defined note field
-      data       = options[:data]        ## instance specific data passed in JUDO_DATA
+      metadata   = options[:metadata]
       ip         = options[:elastic_ip]  ## if the ip was allocated beforehand
       virgin     = options[:virgin]      ## should the server init?
       clone      = options[:clone]       ## if it was cloned from a snapshot
@@ -27,11 +27,11 @@ module Judo
       raise JudoError, "there is already a server with id #{id}" if @base.servers.detect { |s| s.id == id and s != self}
 
       task("Creating server #{name}") do
-        update "name" => name,         "group" => group_name,
-               "note" => note,         "virgin" => virgin,
+        update("name" => name,         "group" => group_name,
+               "virgin" => virgin,     "elastic_ip" => ip,
                "secret" => new_secret, "version" => version,
-               "data" => data,         "elastic_ip" => ip,
-               "clone" => clone,       "created_at" => Time.now.to_i
+               "clone" => clone,       "created_at" => Time.now.to_i)
+        set_metadata(metadata) if metadata
         @base.sdb.put_attributes(@base.base_domain, "groups", group_name => id)
       end
 
@@ -41,8 +41,42 @@ module Judo
       self
     end
 
+    def set_metadata(new_metadata)
+      puts new_metadata.inspect
+      clean_metadata = new_metadata.inject({}) { |buf,(k,v)| 
+        puts [ buf, k , v ].inspect
+        buf[k.to_s] = v.to_s; buf }
+      puts clean_metadata.inspect
+      keys_to_remove = clean_metadata.keys - clean_metadata.keys
+      @metadata = clean_metadata
+      update encode_metadata(clean_metadata) unless clean_metadata.empty?
+      keys_to_remove.each { |key| remove key }
+    end
+
+    def encode_metadata(data)
+      data.inject({}) { |buf,(key,value)| buf["metadata_#{key.to_s}"] = "string:#{value.to_s}"; buf }
+    end
+
+    def metadata
+      @metadata ||= get_metadata
+    end
+
+    def get_metadata
+      state.inject({}) do |buf,(key,value)|
+        if key =~ /^metadata_(.*)/
+          meta_key = $1
+          if value.first =~ /^string:(.*)/
+            buf[meta_key] = $1
+          else
+            raise JudoError, "Invalid key value format in metadata #{key} #{value}"
+          end
+        end
+        buf
+      end
+    end
+
     def group
-      @group ||= @base.groups.detect { |g| g.name == group_name }
+      @group_obj ||= @base.groups.detect { |g| g.name == @group }
     end
 
     def fetch_state
@@ -121,6 +155,10 @@ module Judo
       !!clone
     end
 
+    def first_boot?
+      virgin?
+    end
+
     def virgin?
       get("virgin").to_s == "true"  ## I'm going to set it to true and it will come back from the db as "true" -> could be "false" or false or nil also
     end
@@ -176,7 +214,7 @@ module Judo
     end
 
     def config
-      group.config
+      group.config(version)
     end
 
     def to_s
@@ -297,6 +335,7 @@ module Judo
     end
 
     def start(options = {})
+      @boot= options[:boot]
       new_version = options[:version]
       set_instance_type(options[:instance_type]) if options[:instance_type]
 
@@ -304,7 +343,7 @@ module Judo
       invalid "No config has been commited yet, type 'judo commit'" unless group.version > 0
 
       task("Updating server version")      { update_version(options[:version]) } if options[:version]
-      task("Starting server #{name}")      { launch_ec2(options[:boot]) }
+      task("Starting server #{name}")      { launch_ec2 }
       task("Wait for server")              { wait_for_running } if elastic_ip or has_volumes?
       task("Attaching ip")                 { attach_ip } if elastic_ip
       task("Attaching volumes")            { attach_volumes } if has_volumes?
@@ -346,11 +385,11 @@ module Judo
       update "stopped_at" => Time.now.to_i
     end
 
-    def launch_ec2(boot = nil)
+    def launch_ec2
 #      validate
 
       ## EC2 launch_instances
-      ud = user_data(boot)
+      ud = user_data
       debug(ud)
       result = @base.ec2.launch_instances(ami,
         :instance_type => instance_type,
@@ -363,7 +402,9 @@ module Judo
 
     def debug(str)
       return unless ENV['JUDO_DEBUG'] == "1"
-      puts "<JUDO_DEBUG>#{str}</JUDO_DEBUG>"
+      puts "<DEBUG>"
+      puts str
+      puts "</DEBUG>"
     end
 
     def security_groups
@@ -518,37 +559,18 @@ module Judo
       @base.servers_state.delete(id)
     end
 
-    def user_data(judo_boot = nil)
-      <<USER_DATA
-#!/bin/sh
-
-export DEBIAN_FRONTEND="noninteractive"
-export DEBIAN_PRIORITY="critical"
-export JUDO_ID='#{id}'
-export JUDO_NAME='#{name}'
-export JUDO_DOMAIN='#{@base.domain}'
-export JUDO_BOOT='#{judo_boot}'
-export JUDO_DATA='#{data}'
-export SECRET='#{secret}'
-export JUDO_FIRSTBOOT='#{virgin?}'
-
-apt-get update
-apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby curl -y
-
-gem install kuzushi --no-rdoc --no-ri
-echo 'export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH' >> /etc/profile ; . /etc/profile
-export LOG=/var/log/kuzushi.log
-
-cd /tmp/ ; curl --silent '#{url}' | tar xvz ; cd #{group.name}
-
-kuzushi-setup >> $LOG
-bash setup.sh >> $LOG
-
-USER_DATA
+    def user_data
+      erb = group.userdata(version)
+      debug erb
+      ERB.new(erb, 0, '<>').result(binding)
     end
 
     def url
-      @url ||= group.s3_url
+      group.s3_url
+    end
+
+    def domain
+      @base.domain
     end
 
     def validate
@@ -611,6 +633,14 @@ USER_DATA
 
     def new_secret
       rand(2 ** 128).to_s(36)
+    end
+
+    def group_name
+      @group
+    end
+
+    def boot
+      @boot || {}
     end
 
   end

@@ -1,4 +1,5 @@
 require 'rubygems'
+require 'erb'
 require 'active_support'
 require 'right_aws'
 require 'socket'
