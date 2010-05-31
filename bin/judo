@@ -172,7 +172,7 @@ begin
       snapshot.animate(new_server).start(options)
     when "destroy" then
       raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
-      find_either(judo, ARGV) do |i|
+      find_servers(judo, ARGV) do |i|
         i.destroy
       end
     else
