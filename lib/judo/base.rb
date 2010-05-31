@@ -31,6 +31,13 @@ module Judo
       end
     end
 
+    def find_servers_by_name_or_groups_with_not(*names)
+      ok_servers = names.flatten.reject { |s| s =~ /^\^/ }
+      not_servers = names.flatten.select { |s| s =~ /^\^/ }.map { |s| s =~ /^\^(.*)$/ ; $1 }
+
+      find_servers_by_name_or_groups(ok_servers) - find_servers_by_name_or_groups(not_servers)
+    end
+
     def find_servers_by_name_or_groups(*names)
       just_servers = names.flatten.reject { |s| s =~ /^:/ }
       just_groups = names.flatten.select { |s| s =~ /^:/ }

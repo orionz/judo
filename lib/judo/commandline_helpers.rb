@@ -2,7 +2,7 @@ module JudoCommandLineHelpers
 
   def each_server(judo, args, &blk)
     raise JudoError, "No servers specified - use :all for all servers" if args.empty?
-    servers = judo.find_servers_by_name_or_groups(args)
+    servers = judo.find_servers_by_name_or_groups_with_not(args)
     servers.each do |server|
       begin
         blk.call(server)
