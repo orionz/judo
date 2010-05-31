@@ -623,7 +623,7 @@ module Judo
     end
 
     def <=>(s)
-      [group.name, name] <=> [s.group.name, s.name]
+      [group.name.to_s, name.to_s] <=> [s.group.name.to_s, s.name.to_s]
     end
 
     def new_secret
