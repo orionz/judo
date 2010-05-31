@@ -138,6 +138,14 @@ module Judo
       rand(2**32).to_s(36)
     end
 
+    def default_group_dir
+        File.expand_path(File.dirname(__FILE__) + "/../../default")
+    end
+
+    def default_file(name)
+      "#{default_group_dir}/#{name}"
+    end
+
     def mk_server_name(group)
         index = servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
         "#{group}.#{index}"
@@ -428,7 +436,6 @@ module Judo
     def default_config
         <<DEFAULT
 {
-  "instance_type":"m1.small",
   "ami32":"ami-2d4aa444", // public ubuntu 10.04 ami - 32 bit
   "ami64":"ami-fd4aa494", // public ubuntu 10.04 ami - 64 bit
   "user":"ubuntu",

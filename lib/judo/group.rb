@@ -43,7 +43,8 @@ module Judo
     def compile
       @base.task("Compiling #{self} version #{version + 1}") do
         @version = @version + 1
-        conf = read_config
+        raise JudoError, "can not find group folder #{dir}" unless File.exists?(dir)
+        conf = JSON.parse(read_file('config.json'))
         raise JudoError, "config option 'import' no longer supported" if conf["import"]
         Dir.chdir(@base.repo) do |d|
             puts ""
@@ -51,7 +52,7 @@ module Judo
             puts "Uploading config to s3..."
             @base.s3_put(version_config_file(@version), conf.to_json)
             puts "Uploading userdata.erb to s3..."
-            @base.s3_put(version_userdata_file(@version), read_userdata)
+            @base.s3_put(version_userdata_file(@version), read_file('userdata.erb'))
             puts "Uploading tar file to s3..."
             @base.s3_put(tar_file, File.new(tar_file).read(File.stat(tar_file).size))
             File.delete(tar_file)
@@ -90,31 +91,16 @@ module Judo
       "#{@base.repo}/#{name}/"
     end
 
-    def config_file
-      "#{dir}/config.json"
-    end
-
     def default_userdata_file
-        File.expand_path(File.dirname(__FILE__) + "/default_userdata.erb")
+        File.expand_path(File.dirname(__FILE__) + "/../../default/userdata.erb")
     end
 
-    def userdata_file
-      "#{dir}/userdata.erb"
-    end
-
-    def read_userdata
-      if File.exists?(userdata_file)
-        File.read(userdata_file)
-      else
-        puts "File userdata.erb not found: using #{default_userdata_file} instead"
-        File.read(default_userdata_file)
-      end
-    end
-
-    def read_config
-        JSON.parse(File.read(config_file))
+    def read_file(name)
+        File.read("#{dir}/#{name}")
       rescue Errno::ENOENT
-        raise JudoError, "No config file #{config_file}"
+        default = @base.default_file(name)
+        puts "File #{name} not found: using #{default} instead"
+        File.read default
     end
 
     def delete_server(server)

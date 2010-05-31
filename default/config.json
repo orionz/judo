@@ -1,0 +1,8 @@
+{
+  "ami32":"ami-2d4aa444", // public ubuntu 10.04 ami - 32 bit
+  "ami64":"ami-fd4aa494", // public ubuntu 10.04 ami - 64 bit
+  "user":"ubuntu",        // this is for ssh acccess - defaults to ubuntu not root
+  "security_group":"judo",
+  "my_data": "world world",
+  "availability_zone":"us-east-1d"
+}

@@ -24,14 +24,14 @@ export JUDO_FIRST_BOOT='<%= first_boot? %>'
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
 apt-get update
-apt-get install ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby curl -y
+apt-get install -y ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby
+
+cd /tmp/ ; curl --silent '<%= url %>' | tar xvz ; cd <%= group_name %>
 
 gem install kuzushi --no-rdoc --no-ri --version
 echo 'export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH' >> /etc/profile ; . /etc/profile
 export LOG=/var/log/kuzushi.log
 
-cd /tmp/ ; curl --silent '<%= url %>' | tar xvz ; cd <%= group_name %>
-
-kuzushi-setup >> $LOG
+kuzushi-setup >> $LOG  ## this will properly mount / configure and formal all ebs drives
 bash setup.sh >> $LOG
 

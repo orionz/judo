@@ -46,19 +46,6 @@ module JudoCommandLineHelpers
     servers.flatten.each { |s| judo_yield(s, blk) if blk }
   end
 
-  def find_either(judo, args, &blk)
-    results = []
-    args.each do |arg|
-      server,group = split(arg)
-      if server != ""
-        results << judo.servers.select { |s| s.name == server }
-      else
-        results << judo.groups.select { |g| g.name == group }
-      end
-    end
-    results.flatten.each { |i| judo_yield(i, blk) if blk }
-  end
-
   def find_servers(judo, args, use_default = true, &blk)
     servers = judo.servers if args.empty?
     servers ||= args.map { |a| find_server(judo, a, use_default) }.flatten
