@@ -1,6 +1,21 @@
 #!/bin/bash
 <% 
 
+## this erb generates the userdata for your starting instance
+## in most cases you would never need to edit this as most changes can go in setup.sh
+
+## this script must remain under 16k to work
+
+## good reasons to change this would be
+##   -- pass some boot options or metadata to the instance when it boots
+##   -- you do not want to install or use the default version of kuzushi or judo
+##   -- you wish to log the boot process differently
+
+## without writing a setup.sh this script will install ruby and kuzushi and 
+## run kuzushi-setup which will handle waiting for the ebs disks to attach, 
+## configuring them, and if needed formatting them and installing any needed 
+## packages (xfs tools, mdadm)
+
 ## the variables available for use in the erb are as follows
 
 ##   id - this is random string that uniqily identifies the server for its lifetime
@@ -21,14 +36,16 @@ export JUDO_DOMAIN='<%= domain %>'
 export JUDO_SECRET='<%= secret %>'
 export JUDO_FIRST_BOOT='<%= first_boot? %>'
 
+hostname <%= name %>
+
 export DEBIAN_FRONTEND="noninteractive"
 export DEBIAN_PRIORITY="critical"
 apt-get update
 apt-get install -y ruby rubygems ruby-dev irb libopenssl-ruby libreadline-ruby
 
-cd /tmp/ ; curl --silent '<%= url %>' | tar xvz ; cd <%= group_name %>
+cd /tmp/ ; curl --silent '<%= url %>' | tar xvz ; cd <%= group_name %> ; chmod 700 .
 
-gem install kuzushi --no-rdoc --no-ri --version
+gem install kuzushi --no-rdoc --no-ri --version '<%= config['kuzushi_version'] || ">= 0" %>'
 echo 'export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH' >> /etc/profile ; . /etc/profile
 export LOG=/var/log/kuzushi.log
 

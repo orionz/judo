@@ -3,9 +3,8 @@ module Judo
     attr_accessor :judo_dir, :repo, :group, :domain
 
     def initialize(options = Judo::Base.default_options)
-      @judo_dir      = options[:judo_dir]
-      @repo          = options[:repo]
-      @group         = options[:group]
+      @judo_dir      = File.expand_path(options[:judo_dir]) if options[:judo_dir]
+      @repo          = File.expand_path(options[:repo]) if options[:repo]
       @bucket_name   = options[:bucket]
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
@@ -13,6 +12,30 @@ module Judo
       @key_name      = options[:key_name]
       @key_material  = options[:key_material]
       @key_create    = options[:key_create]
+    end
+
+    def find_groups(names)
+      return groups if names.include?(":all")
+      names.map do |name|
+        groups.detect { |g| g.displayname == name } || (raise JudoError, "No such group #{name}")
+      end
+    end
+  
+    def find_server(name)
+      find_servers([name]).first
+    end
+
+    def find_servers(names)
+      names.map do |name|
+        servers.detect { |s| s.name == name || s.displayname == name } || (raise JudoError, "No such server #{name}")
+      end
+    end
+
+    def find_servers_by_name_or_groups(*names)
+      just_servers = names.flatten.reject { |s| s =~ /^:/ }
+      just_groups = names.flatten.select { |s| s =~ /^:/ }
+    
+      [find_groups(just_groups).map { |g| g.servers } + find_servers(just_servers)].flatten
     end
 
     def volumes
@@ -66,7 +89,6 @@ module Judo
       group_config = Dir["#{repo_dir}/*/config.json"].detect { |d| File.dirname(d) == pwd }
       {
         :judo_dir      => dir,
-        :group         => group_config ? File.basename(File.dirname(group_config)) : nil,
         :repo          => repo_dir,
         :domain        => (config["domain"] || ENV['JUDO_DOMAIN']),
         :bucket        => (config["s3_bucket"] || ENV['JUDO_BUCKET']),
@@ -183,7 +205,7 @@ module Judo
     end
 
     def groups
-      @groups ||= group_versions.map { |name,ver| Judo::Group.new(self, name, ver.first.to_i ) }
+      @groups ||= group_versions.map { |name,ver| Judo::Group.new(self, name) }
     end
 
     def reload_ec2_instances
@@ -393,9 +415,7 @@ module Judo
         return
       end
       task("Setting up default group") do
-        Dir.chdir(repo) do
-          File.open("default/config.json","w") { |f| f.write default_config }
-        end
+        FileUtils.cp_r(default_group_dir, repo)
         get_group("default").compile
       end
     end

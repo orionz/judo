@@ -2,10 +2,13 @@ module Judo
   class Group
     attr_accessor :name, :version
 
-    def initialize(base, name, version)
+    def initialize(base, name)
       @base = base
       @name = name
-      @version = version
+    end
+
+    def version
+      @version ||= (@base.group_versions[@name] || [0]).first.to_i
     end
 
     def userdata(version)
@@ -21,7 +24,7 @@ module Judo
     end
 
     def servers
-      @base.servers.select { |s| server_ids.include?(s.name) }
+      @base.servers.select { |s| server_ids.include?(s.id) }
     end
 
     def load_userdata(version)
@@ -41,8 +44,9 @@ module Judo
     end
 
     def compile
+      raise JudoError, "Group name :all is reserved" if name == "all"
       @base.task("Compiling #{self} version #{version + 1}") do
-        @version = @version + 1
+        @version = version + 1
         raise JudoError, "can not find group folder #{dir}" unless File.exists?(dir)
         conf = JSON.parse(read_file('config.json'))
         raise JudoError, "config option 'import' no longer supported" if conf["import"]
@@ -107,8 +111,12 @@ module Judo
       sdb.delete_attributes(@base.base_domain, "groups", name => server.id)
     end
 
-    def to_s
+    def displayname 
       ":#{name}"
+    end
+
+    def to_s
+      displayname
     end
 
     def sdb

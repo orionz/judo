@@ -101,9 +101,6 @@ banner
   opts.on( '-b', '--bucket BUCKET', 'Specify the AWS S3 bucket to use' ) do |bucket|
     options[:bucket] = bucket
   end
-  opts.on( '-g', '--group GROUP', 'Specify the default group of the repo dir' ) do |group|
-    options[:group] = group
-  end
   opts.on( '-v', '--version VERSION', 'Update the servers config version on create/start/launch' ) do |version|
     options[:version] = version
   end
@@ -126,16 +123,16 @@ begin
     when "volumes" then do_volumes(judo)
     when "list" then do_list(judo, ARGV)
     when "groups" then do_groups(judo)
-    when "watch" then find_servers(judo, ARGV)        { |s| s.ssh_command("tail -n 1000 -f /var/log/kuzushi.log") }
-    when "info" then find_servers(judo, ARGV)         { |s| do_info(judo, s) }
-    when "console" then find_servers(judo, ARGV)      { |s| puts s.console_output }
-    when "commit" then find_groups(judo, ARGV)        { |g| g.compile }
-    when "ssh" then find_servers(judo, ARGV)          { |s| s.connect_ssh }
-    when "start" then find_servers(judo, ARGV)        { |s| s.start(options) }
-    when "restart" then find_servers(judo, ARGV)      { |s| s.restart(options) }
-    when "stop" then find_servers(judo, ARGV)         { |s| s.stop(options) }
-    when "create" then mk_servers(judo, options, ARGV)
-    when "launch" then mk_servers(judo, options, ARGV)         { |s| s.start(options) }
+    when "watch" then each_server(judo, ARGV)        { |s| s.ssh_command("tail -n 1000 -f /var/log/kuzushi.log") }
+    when "info" then each_server(judo, ARGV)         { |s| do_info(judo, s) }
+    when "console" then each_server(judo, ARGV)      { |s| puts s.console_output }
+    when "commit" then mk_groups(judo, ARGV)         { |g| g.compile }
+    when "ssh" then each_server(judo, ARGV)          { |s| s.connect_ssh }
+    when "start" then each_server(judo, ARGV)        { |s| s.start(options) }
+    when "restart" then each_server(judo, ARGV)      { |s| s.restart(options) }
+    when "stop" then each_server(judo, ARGV)         { |s| s.stop(options) }
+    when "create" then mk_servers(judo, options, ARGV, false)
+    when "launch" then mk_servers(judo, options, ARGV, true)
     when "snapshots" then do_snapshots(judo, ARGV)
     when "config" then
       puts "Judo DB Version: #{judo.db_version}"
@@ -143,13 +140,12 @@ begin
       puts "Judo Bucket:     #{judo.bucket_name}"
     when "rename" then
       raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2
-      old,new = ARGV
-      server = find_servers(judo, [old]).first
-      server.rename(new)
+      server = judo.find_server(ARGV[0]).rename(ARGV[1])
     when "swap" then
-      servers = find_servers(judo, ARGV)
-      raise JudoError, "usage: judo swapip SERVER SERVER" unless servers.size == 2
-      servers[0].swap(servers[1])
+      raise JudoError, "usage: judo swap SERVER SERVER" unless ARGV.size == 2
+      server1 = judo.find_server(ARGV[0])
+      server2 = judo.find_server(ARGV[1])
+      server1.swap(server2)
     when "erase" then
       raise JudoError, "usage: judo erase SNAPSHOT" unless ARGV.size == 1
       snapshot_name = ARGV.shift
@@ -158,10 +154,7 @@ begin
       raise JudoError, "usage: judo snapshot SERVER SNAPSHOT" unless ARGV.size == 2
       server_name = ARGV.shift
       snapshot_name = ARGV.shift
-      servers = find_servers(judo, [server_name])
-      raise JudoError, "You must specify a valid server to snapshot" if servers.empty?
-      raise JudoError, "You can only snapshot one server at a time" if servers.size > 1
-      servers[0].snapshot(snapshot_name)
+      judo.find_server(server_name).snapshot(snapshot_name)
     when "animate" then
       snapshot_name = ARGV.shift
       raise JudoError, "You must specify a snapshot name" unless snapshot_name
@@ -171,10 +164,9 @@ begin
       raise JudoError, "No such snapshot #{snapshot_name}" unless snapshot
       snapshot.animate(new_server).start(options)
     when "destroy" then
-      raise JudoError, "You must specify what servers to destroy" if ARGV.empty?
-      find_servers(judo, ARGV) do |i|
-        i.destroy
-      end
+      raise JudoError, "usage: judo destroy SERVERS" if ARGV.empty?
+      raise JudoError, "You cannot destroy :all" if ARGV.include?(":all")
+      each_server(judo, ARGV) { |i| i.destroy }
     else
       raise JudoError, "No such action #{action}"
   end

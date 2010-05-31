@@ -2,7 +2,8 @@
   "ami32":"ami-2d4aa444", // public ubuntu 10.04 ami - 32 bit
   "ami64":"ami-fd4aa494", // public ubuntu 10.04 ami - 64 bit
   "user":"ubuntu",        // this is for ssh acccess - defaults to ubuntu not root
+  "kuzushi_version": "0.0.54",  // this will pin the version of kuzushi the server will boot with
   "security_group":"judo",
-  "my_data": "world world",
+  "example_config": "example_mode",
   "availability_zone":"us-east-1d"
 }

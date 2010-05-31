@@ -10,7 +10,7 @@ module Judo
     end
 
     def create(name, options)
-      raise JudoError, "no group specified" unless group_name
+      raise JudoError, "group '#{group_name}' does not exists" unless group
 
       options[:virgin] = true if options[:virgin].nil?
 
@@ -212,8 +212,12 @@ module Judo
       group.config(version)
     end
 
-    def to_s
+    def displayname
       "#{name}:#{group_name}"
+    end
+
+    def to_s
+      displayname
     end
 
     def allocate_disk(snapshots)

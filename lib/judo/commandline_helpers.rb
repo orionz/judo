@@ -1,74 +1,53 @@
 module JudoCommandLineHelpers
-  def judo_yield(arg, blk)
-    begin
-      blk.call(arg)
-    rescue JudoInvalid => e
-      puts "#{arg} - #{e.message}"
-    end
-  end
 
-  def split(string)
-    if string =~  /([^:]*):(.*)/
-      [ $1, $2 ]
-    else
-      [ string, nil]
-    end
-  end
-
-  def find_groups(judo, args, &blk)
-    raise JudoError, "No groups specified" if args.empty? and judo.group.nil?
-
-    args << ":#{judo.group}" if args.empty?  ## use default group if none specified
-
-    groups = args.map do |arg|
-      name,group = split(arg)
-      raise JudoError, "specify a group with ':GROUP'" unless name == "" and group
-      judo.get_group(group)
-    end
-
-    groups.each { |group| judo_yield(group, blk) if blk }
-  end
-
-  ## I dont like the way this is working anymore - needs refactor
-  def mk_servers(judo, options, args, &blk)
-    servers = args.map do |arg|
-      name,group = split(arg)
-      group ||= judo.group
-      raise JudoError, "Cannot must specify a server, not a group, on create and launch" unless name
-      if name =~ /^\+(\d+)/
-        count = $1.to_i
-        raise JudoError, "You can batch-create between 1 and 5 servers" if count < 1 or count > 5
-        (1..count).map { judo.create_server( judo.mk_server_name(group), group, options) }
-      else
-        judo.create_server(name, group, options)
+  def each_server(judo, args, &blk)
+    raise JudoError, "No servers specified - use :all for all servers" if args.empty?
+    servers = judo.find_servers_by_name_or_groups(args)
+    servers.each do |server|
+      begin
+        blk.call(server)
+      rescue JudoInvalid => e
+        puts "#{server} - #{e.message}"
       end
     end
-    servers.flatten.each { |s| judo_yield(s, blk) if blk }
   end
 
-  def find_servers(judo, args, use_default = true, &blk)
-    servers = judo.servers if args.empty?
-    servers ||= args.map { |a| find_server(judo, a, use_default) }.flatten
-
-    raise JudoError, "No servers" if servers.empty?
-
-    servers.each { |s| judo_yield(s,blk) if blk }
-    servers
+  def mk_server_names(judo, args, &blk)
+    args.each do |arg|
+      name,group = arg.split(":")
+      raise JudoError, "You must specify a group on create and launch" unless group
+      names = if name =~ /^[12345]$/ 
+        (1..(name.to_i)).each do 
+          blk.call(judo.mk_server_name(group), group)
+        end
+      elsif name == ""
+        blk.call(judo.mk_server_name(group), group)
+      elsif name =~ /^\d+$/ 
+        raise JudoError, "You can batch-create between 1 and 5 servers" if count < 1 or count > 5
+      else
+        blk.call(name, group)
+      end
+    end
   end
 
-  def find_server(judo, arg, use_default = false)
-    ## this assumes names are unique no matter the group
-    name,group = split(arg)
-    if name != ""
-      server = judo.servers.detect { |s| s.name == name }
-      raise JudoError, "No such server #{name}" unless server
-      raise JudoError, "Server #{name} not in group #{group}" if group and server.group.name != group
-      server
-    else
-      group ||= judo.group if use_default
-      g = judo.groups.detect { |g| g.name == group }
-      raise JudoError, "No such group #{group}" unless g
-      g.servers
+  def mk_groups(judo, args, &blk)
+    args.each do |name|
+      if name =~ /:(.+)$/
+        blk.call(Judo::Group.new(judo, $1))
+      else
+        raise JudoError, "Invalid group name '#{name}'"
+      end
+    end
+  end
+
+  def mk_servers(judo, options, args, start)
+    mk_server_names(judo, args) do |name, group|
+      begin
+        server = judo.create_server(name, group, options)
+        server.start(options) if start
+      rescue JudoInvalid => e
+        puts "#{server} - #{e.message}"
+      end
     end
   end
 
@@ -108,20 +87,18 @@ module JudoCommandLineHelpers
   end
 
   def do_snapshots(judo, args)
-    servers = find_servers(judo, args)
     printf "  SNAPSHOTS\n"
     printf "%s\n", ("-" * 80)
     judo.snapshots.each do |snapshot|
-      next if args and not servers.detect { |s| s == snapshot.server }
       printf "%-15s %-25s %-15s %-10s %s\n", snapshot.name, snapshot.server_name, snapshot.group_name, snapshot.version_desc, "ebs:#{snapshot.ec2_ids.size}"
     end
   end
 
   def do_list(judo, args)
-    servers = find_servers(judo, args)
     printf "  SERVERS\n"
     printf "%s\n", ("-" * 80)
-    servers.sort.each do |s|
+    args << ":all" if args.empty?
+    each_server(judo,args) do |s|
       printf "%-32s %-12s %-7s %-11s %-11s %-10s %-3s %s\n", s.name, s.group.name, s.version_desc, s.get("instance_id"), s.size_desc, s.ec2_state, "ebs:#{s.volumes.keys.size}", s.has_ip? ? "ip" : ""
     end
   end
