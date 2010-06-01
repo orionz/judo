@@ -195,7 +195,7 @@ module Judo
 
     def get_group(name)
       group = groups.detect { |g| g.name == name }
-      group ||= Judo::Group.new(self, name, 0)
+      group ||= Judo::Group.new(self, name)
       group
     end
 

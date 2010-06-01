@@ -33,7 +33,7 @@ module JudoCommandLineHelpers
   def mk_groups(judo, args, &blk)
     args.each do |name|
       if name =~ /:(.+)$/
-        blk.call(Judo::Group.new(judo, $1))
+        blk.call(judo.get_group($1))
       else
         raise JudoError, "Invalid group name '#{name}'"
       end
