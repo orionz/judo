@@ -50,16 +50,17 @@ module Judo
         raise JudoError, "can not find group folder #{dir}" unless File.exists?(dir)
         conf = JSON.parse(read_file('config.json'))
         raise JudoError, "config option 'import' no longer supported" if conf["import"]
+        tar = tar_file(@version)
         Dir.chdir(@base.repo) do |d|
             puts ""
-            system "tar czvf #{tar_file} #{name}"
+            system "tar czvf #{tar} #{name}"
             puts "Uploading config to s3..."
             @base.s3_put(version_config_file(@version), conf.to_json)
             puts "Uploading userdata.erb to s3..."
             @base.s3_put(version_userdata_file(@version), read_file('userdata.erb'))
             puts "Uploading tar file to s3..."
-            @base.s3_put(tar_file, File.new(tar_file).read(File.stat(tar_file).size))
-            File.delete(tar_file)
+            @base.s3_put(tar, File.new(tar).read(File.stat(tar).size))
+            File.delete(tar)
         end
         set_version
       end
@@ -73,12 +74,12 @@ module Judo
       "#{name}.#{version}.erb"
     end
 
-    def tar_file
+    def tar_file(version)
       "#{name}.#{version}.tar.gz"
     end
 
-    def s3_url
-      @url = @base.s3_url(tar_file)
+    def s3_url(version)
+      @url = @base.s3_url(tar_file(version))
     end
 
 
