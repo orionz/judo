@@ -6,7 +6,6 @@ module Judo
   ###   "server"     => server.id
   ###   "group"      => server.group.name
   ###   "virgin"     => server.virgin
-  ###   "note"       => server.note
   ###   "data"       => server.data
   ###   "created_at" => unixtime
   class Snapshot
@@ -46,12 +45,9 @@ module Judo
       get("version").to_i
     end
 
-    def note
-      get("note")
-    end
-
-    def data
-      get("data")
+    def metadata
+      metadata_json = get("metadata_json")
+      JSON.load(metadata_json) if metadata_json
     end
 
     def virgin
@@ -72,8 +68,7 @@ module Judo
         @base.sdb.put_attributes(@base.snapshot_domain, name, {
           "version" => server.version,
           "virgin" => server.virgin?,
-          "note" => server.note,
-          "data" => server.data,
+          "metadata_json" => server.get("metadata_json"),
           "devs" => devs,
           "server" => server.id,
           "group" => server.group.name,
@@ -85,7 +80,9 @@ module Judo
 
     def animate(new_server)
       raise JudoError, "cannot animate, snapshotting not complete" unless completed?
-      @base.create_server(new_server, group_name, :version => version, :snapshots => devs, :virgin => virgin, :note => note, :data => data , :clone => name)
+      @base.create_server(new_server, group_name,
+        :version => version, :snapshots => devs, :virgin => virgin,
+        :metadata => metadata , :clone => name)
     end
 
     def delete

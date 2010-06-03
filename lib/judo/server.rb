@@ -42,19 +42,13 @@ module Judo
     end
 
     def set_metadata(new_metadata)
-      puts new_metadata.inspect
-      clean_metadata = new_metadata.inject({}) { |buf,(k,v)| 
-        puts [ buf, k , v ].inspect
-        buf[k.to_s] = v.to_s; buf }
-      puts clean_metadata.inspect
-      keys_to_remove = clean_metadata.keys - clean_metadata.keys
-      @metadata = clean_metadata
-      update encode_metadata(clean_metadata) unless clean_metadata.empty?
-      keys_to_remove.each { |key| remove key }
-    end
-
-    def encode_metadata(data)
-      data.inject({}) { |buf,(key,value)| buf["metadata_#{key.to_s}"] = [value].to_json; buf }
+      new_metadata_json = new_metadata.to_json
+      if (new_metadata_json.size > 1000)
+        raise "metadata json too big: '#{new_metadata_json}'"
+      else
+        @metadata = new_metadata
+        update("metadata_json" => new_metadata_json)
+      end
     end
 
     def metadata
@@ -62,12 +56,8 @@ module Judo
     end
 
     def get_metadata
-      state.inject({}) do |buf,(key,value)|
-        if key =~ /^metadata_(.*)/
-          buf[$1] = JSON.load(value.first)
-        end
-        buf
-      end
+      metadata_json = get("metadata_json")
+      JSON.load(metadata_json) if metadata_json
     end
 
     def group
@@ -96,10 +86,6 @@ module Judo
 
     def name
       get "name"
-    end
-
-    def data
-      get "data"
     end
 
     def instance_id
@@ -136,10 +122,6 @@ module Judo
       else
         "start"
       end
-    end
-
-    def note
-      get("note")
     end
 
     def clone
