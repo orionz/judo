@@ -29,6 +29,7 @@
 ##   url - the URL to the group verson file in the s3 bucket
 
 %>
+set -x
 
 export JUDO_ID='<%= id %>'
 export JUDO_NAME='<%= name %>'
@@ -49,6 +50,5 @@ gem install kuzushi --no-rdoc --no-ri --version '<%= config['kuzushi_version'] |
 echo 'export PATH=`ruby -r rubygems -e "puts Gem.bindir"`:$PATH' >> /etc/profile ; . /etc/profile
 export LOG=/var/log/kuzushi.log
 
-kuzushi-setup >> $LOG  ## this will properly mount / configure and formal all ebs drives
 bash setup.sh >> $LOG
 

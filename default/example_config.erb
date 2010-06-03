@@ -1,0 +1,7 @@
+## this is an example config file for a nonexistent app
+## it will access the amount of ram and values in the config.json
+
+memory_size = <%= @system.memory["total"].to_i / 2 %> kb  ## @system comes from ohai
+mode        = <%= @config['example_config'] %>  ## @config comes from the config.json 
+password    = '<%= ENV['JUDO_SECRET'] %>'
+

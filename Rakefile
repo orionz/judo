@@ -12,6 +12,7 @@ Jeweler::Tasks.new do |s|
 	s.executables = %w(judo)
 	s.add_dependency "aws",  [">= 2.3.8"]
 	s.add_dependency "json"
+	s.add_dependency "activesupport"
 end
 
 Jeweler::RubyforgeTasks.new

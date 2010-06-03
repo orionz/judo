@@ -350,7 +350,7 @@ module Judo
 
     def restart(options = {})
       stop(options) if running?
-      start
+      start(options)
     end
 
     def generic_name?
@@ -565,7 +565,7 @@ module Judo
     end
 
     def url
-      group.s3_url
+      group.s3_url(version)
     end
 
     def domain
