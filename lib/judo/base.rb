@@ -1,14 +1,13 @@
 module Judo
   class Base
-    attr_accessor :judo_dir, :repo, :group, :domain
+    attr_accessor :judo_dir, :repo, :group
 
-    def initialize(options = Judo::Base.default_options)
+    def initialize(options = Judo::Base.defaults)
       @judo_dir      = File.expand_path(options[:judo_dir]) if options[:judo_dir]
       @repo          = File.expand_path(options[:repo]) if options[:repo]
       @bucket_name   = options[:bucket]
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
-      @domain        = options[:domain]
       @key_name      = options[:key_name]
       @key_material  = options[:key_material]
       @key_create    = options[:key_create]
@@ -20,7 +19,7 @@ module Judo
         groups.detect { |g| g.displayname == name } || (raise JudoError, "No such group #{name}")
       end
     end
-  
+
     def find_server(name)
       find_servers([name]).first
     end
@@ -41,7 +40,7 @@ module Judo
     def find_servers_by_name_or_groups(*names)
       just_servers = names.flatten.reject { |s| s =~ /^:/ }
       just_groups = names.flatten.select { |s| s =~ /^:/ }
-    
+
       [find_groups(just_groups).map { |g| g.servers } + find_servers(just_servers)].flatten
     end
 
@@ -70,34 +69,25 @@ module Judo
       end
     end
 
-    def sdb_domain(name)
-      if @domain
-        "#{@domain}_#{name}"
-      else
-        name
-      end
-    end
-
     def server_domain
-      sdb_domain("judo_servers")
+      "judo_servers"
     end
 
     def snapshot_domain
-      sdb_domain("judo_snapshots")
+      "judo_snapshots"
     end
 
     def base_domain
-      sdb_domain("judo_config")
+      "judo_base"
     end
 
-    def self.default_options(pwd = Dir.pwd, dir = find_judo_dir(pwd))
+    def self.defaults(pwd = Dir.pwd, dir = find_judo_dir(pwd))
       config = YAML.load File.read("#{dir}/config.yml")
       repo_dir = config["repo"] || File.dirname(dir)
       group_config = Dir["#{repo_dir}/*/config.json"].detect { |d| File.dirname(d) == pwd }
       {
         :judo_dir      => dir,
         :repo          => repo_dir,
-        :domain        => (config["domain"] || ENV['JUDO_DOMAIN']),
         :bucket        => (config["s3_bucket"] || ENV['JUDO_BUCKET']),
         :access_id     => (config["access_id"] || ENV['AWS_ACCESS_KEY_ID']),
         :access_secret => (config["access_secret"] || ENV['AWS_SECRET_ACCESS_KEY'])
@@ -107,7 +97,6 @@ module Judo
         :access_id     => ENV['AWS_ACCESS_KEY_ID'],
         :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
         :bucket        => ENV['JUDO_BUCKET'],
-        :domain        => ENV['JUDO_DOMAIN'],
       }.delete_if { |key,value| value.nil? }
     end
 
@@ -275,23 +264,15 @@ module Judo
     end
 
     def s3_url(k)
-      Aws::S3Generator::Key.new(bucket, s3_key(k)).get
+      Aws::S3Generator::Key.new(bucket, k).get
     end
 
     def s3_get(k)
-      bucket.get( s3_key(k))
+      bucket.get(k)
     end
 
     def s3_put(k, file)
-      bucket.put( s3_key(k), file)
-    end
-
-    def s3_key(k)
-      if @domain
-        "#{@domain}/#{k}"
-      else
-        k
-      end
+      bucket.put(k, file)
     end
 
     def repo

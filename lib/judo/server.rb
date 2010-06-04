@@ -6,7 +6,6 @@ module Judo
       @base = base
       @id = id
       @group = group
-      @judo_domain = base.domain
     end
 
     def create(name, options)
@@ -548,10 +547,6 @@ module Judo
 
     def url
       group.s3_url(version)
-    end
-
-    def domain
-      @base.domain
     end
 
     def validate
