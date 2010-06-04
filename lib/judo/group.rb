@@ -40,28 +40,32 @@ module Judo
     end
 
     def set_version
-      @base.sdb.put_attributes(@base.base_domain, "group_versions", { name => version }, :replace)
+      @base.sdb.put_attributes(@base.base_domain,
+        "group_versions", {name => version}, :replace)
     end
 
-    def compile
-      raise JudoError, "Group name :all is reserved" if name == "all"
+    def check_conf(conf)
+      if conf["import"]
+        raise JudoError, "config option 'import' no longer supported"
+      end
+    end
+
+    def commit
+      raise JudoError, "Group name all is reserved" if name == "all"
       @base.task("Compiling #{self} version #{version + 1}") do
         @version = version + 1
-        raise JudoError, "can not find group folder #{dir}" unless File.exists?(dir)
-        conf = JSON.parse(read_file('config.json'))
-        raise JudoError, "config option 'import' no longer supported" if conf["import"]
+        conf = JSON.parse(File.read("#{name}/config.json"))
+        userdata = File.read("#{name}/userdata.erb")
         tar = tar_file(@version)
-        Dir.chdir(@base.repo) do |d|
-            puts ""
-            system "tar czvf #{tar} #{name}"
-            puts "Uploading config to s3..."
-            @base.s3_put(version_config_file(@version), conf.to_json)
-            puts "Uploading userdata.erb to s3..."
-            @base.s3_put(version_userdata_file(@version), read_file('userdata.erb'))
-            puts "Uploading tar file to s3..."
-            @base.s3_put(tar, File.new(tar).read(File.stat(tar).size))
-            File.delete(tar)
-        end
+        puts ""
+        system "tar czvf #{tar} #{name}"
+        puts "Uploading config to s3..."
+        @base.s3_put(version_config_file(@version), conf.to_json)
+        puts "Uploading userdata.erb to s3..."
+        @base.s3_put(version_userdata_file(@version), userdata)
+        puts "Uploading tar file to s3..."
+        @base.s3_put(tar, File.new(tar).read(File.stat(tar).size))
+        File.delete(tar)
         set_version
       end
     end
@@ -82,7 +86,6 @@ module Judo
       @url = @base.s3_url(tar_file(version))
     end
 
-
     def destroy
       servers.each { |s| s.destroy }
       @base.task("Destring #{self}") do
@@ -92,27 +95,11 @@ module Judo
       end
     end
 
-    def dir
-      "#{@base.repo}/#{name}/"
-    end
-
-    def default_userdata_file
-        File.expand_path(File.dirname(__FILE__) + "/../../default/userdata.erb")
-    end
-
-    def read_file(name)
-        File.read("#{dir}/#{name}")
-      rescue Errno::ENOENT
-        default = @base.default_file(name)
-        puts "File #{name} not found: using #{default} instead"
-        File.read default
-    end
-
     def delete_server(server)
-      sdb.delete_attributes(@base.base_domain, "groups", name => server.id)
+      @base.sdb.delete_attributes(@base.base_domain, "groups", name => server.id)
     end
 
-    def displayname 
+    def displayname
       ":#{name}"
     end
 
@@ -120,16 +107,8 @@ module Judo
       displayname
     end
 
-    def sdb
-      @base.sdb
-    end
-
     def version_desc(v)
-      if v == version
-        "v#{v}"
-      else
-        "v#{v}/#{version}"
-      end
+      v == version ? "v#{v}" : "v#{v}/#{version}"
     end
   end
 end

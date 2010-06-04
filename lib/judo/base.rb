@@ -1,16 +1,41 @@
 module Judo
   class Base
-    attr_accessor :judo_dir, :repo, :group
+    attr_accessor :group
 
-    def initialize(options = Judo::Base.defaults)
-      @judo_dir      = File.expand_path(options[:judo_dir]) if options[:judo_dir]
-      @repo          = File.expand_path(options[:repo]) if options[:repo]
-      @bucket_name   = options[:bucket]
+    def self.defaults
+      {
+        :access_id     => ENV['AWS_ACCESS_KEY_ID'],
+        :access_secret => ENV['AWS_SECRET_ACCESS_KEY']
+      }
+    end
+
+    def initialize(options)
       @access_id     = options[:access_id]
       @access_secret = options[:access_secret]
-      @key_name      = options[:key_name]
-      @key_material  = options[:key_material]
-      @key_create    = options[:key_create]
+    end
+
+    def access_id
+      @access_id || (raise JudoError, "no AWS Access ID specified")
+    end
+
+    def access_secret
+      @access_secret || (raise JudoError, "no AWS Secret Key specified")
+    end
+
+    def bucket_name
+      "judo_#{access_id}"
+    end
+
+    def server_domain
+      "judo_servers"
+    end
+
+    def snapshot_domain
+      "judo_snapshots"
+    end
+
+    def base_domain
+      "judo_base"
     end
 
     def find_groups(names)
@@ -69,49 +94,6 @@ module Judo
       end
     end
 
-    def server_domain
-      "judo_servers"
-    end
-
-    def snapshot_domain
-      "judo_snapshots"
-    end
-
-    def base_domain
-      "judo_base"
-    end
-
-    def self.defaults(pwd = Dir.pwd, dir = find_judo_dir(pwd))
-      config = YAML.load File.read("#{dir}/config.yml")
-      repo_dir = config["repo"] || File.dirname(dir)
-      group_config = Dir["#{repo_dir}/*/config.json"].detect { |d| File.dirname(d) == pwd }
-      {
-        :judo_dir      => dir,
-        :repo          => repo_dir,
-        :bucket        => (config["s3_bucket"] || ENV['JUDO_BUCKET']),
-        :access_id     => (config["access_id"] || ENV['AWS_ACCESS_KEY_ID']),
-        :access_secret => (config["access_secret"] || ENV['AWS_SECRET_ACCESS_KEY'])
-      }.delete_if { |key,value| value.nil? }
-    rescue Object => e
-      {
-        :access_id     => ENV['AWS_ACCESS_KEY_ID'],
-        :access_secret => ENV['AWS_SECRET_ACCESS_KEY'],
-        :bucket        => ENV['JUDO_BUCKET'],
-      }.delete_if { |key,value| value.nil? }
-    end
-
-    def self.find_judo_dir(check)
-      if check == "/"
-        if File.exists?("#{ENV['HOME']}/.judo")
-          "#{ENV['HOME']}/.judo"
-        else
-          nil
-        end
-      else
-        File.exists?(check + "/.judo") ? check + "/.judo" : find_judo_dir(File.dirname(check))
-      end
-    end
-
     def sdb
       @sdb ||= Aws::SdbInterface.new(access_id, access_secret, :logger => Logger.new(nil))
     end
@@ -156,17 +138,9 @@ module Judo
       rand(2**32).to_s(36)
     end
 
-    def default_group_dir
-        File.expand_path(File.dirname(__FILE__) + "/../../default")
-    end
-
-    def default_file(name)
-      "#{default_group_dir}/#{name}"
-    end
-
     def mk_server_name(group)
-        index = servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
-        "#{group}#{index}"
+      index = servers.map { |s| (s.name =~ /^#{s.group.name}.(\d*)$/); $1.to_i }.sort.last.to_i + 1
+      "#{group}#{index}"
     end
 
     def create_server(name, group, options)
@@ -232,21 +206,6 @@ module Judo
       @group_version ||= sdb.get_attributes(base_domain, "group_versions")[:attributes]
     end
 
-    def set_keypair(key_name, material)
-      @key_name = key_name
-      @key_material = material
-      s3_put("#{key_name}.pem", material)
-      update "key_name" => key_name
-    end
-
-    def key_name
-      @key_name ||= get("key_name")
-    end
-
-    def key_material
-      @key_material ||= s3_get("#{key_name}.pem")
-    end
-
     def ip_to_judo(ip)
       servers.detect { |s| s.elastic_ip == ip }
     end
@@ -275,61 +234,6 @@ module Judo
       bucket.put(k, file)
     end
 
-    def repo
-      raise JudoError, "no repo dir specified" unless @repo
-      raise JudoError, "repo dir not found" unless File.exists?(@repo)
-      @repo
-    end
-
-    def access_id
-      @access_id || (raise JudoError, "no AWS Access ID specified")
-    end
-
-    def access_secret
-      @access_secret || (raise JudoError, "no AWS Secret Key specified")
-    end
-
-    ## this is a little funny - does not work like the others - can specify bucket on cmdline or env - but if not takes from judo state
-    def bucket_name
-      (@bucket_name ||= get("bucket")) || (raise JudoError, "no S3 bucket name specified")
-    end
-
-    def set_bucket_name(new_name)
-      @bucket_name = new_name
-      update "bucket" => @bucket_name
-    end
-
-    def db_version
-      2
-    end
-
-    def upgrade_db
-      case get_db_version
-        when 0
-          task("Upgrading Judo: Creating Snapshots SDB Domain") do
-            sdb.create_domain(server_domain)
-            sdb.create_domain(base_domain)
-            sdb.create_domain(snapshot_domain)
-            set_db_version(2)
-          end
-        when 1
-          task("Upgrading Judo: Creating Snapshots SDB Domain") do
-            sdb.create_domain(snapshot_domain)
-            set_db_version(2)
-          end
-        else
-          raise JudoError, "judo db is newer than the current gem - upgrade judo and try again"
-      end
-    end
-
-    def set_db_version(new_version)
-      update "dbversion" => new_version
-    end
-
-    def get_db_version
-      get("dbversion").to_i
-    end
-
     def get(key)
       state[key] && [state[key]].flatten.first
     end
@@ -344,113 +248,83 @@ module Judo
       @state ||= sdb.get_attributes(base_domain, "judo")[:attributes]
     end
 
-    def check_version
-        upgrade_db if get_db_version != db_version
-      rescue Aws::AwsError => e
-        setup_sdb
-        upgrade_db
+    def ensure_setup
+      ensure_init
+      ensure_db_version
     end
 
-    def setup(options = {})
-      @repo ||= "." ## use cwd as default repo dir
-
-      setup_sdb
-      setup_keypair
-      setup_bucket
-      setup_security_group
-      setup_judo_config
-      setup_repo
+    def ensure_init
+      if !has_init?
+        init_sdb
+        init_security_group
+        init_keypair
+      end
     end
 
-    def setup_sdb
-      task("Trying to connect to SimpleDB") do
+    def has_init?
+      sdb.list_domains[:domains].include?(base_domain)
+    end
+
+    def init_sdb
+      task("Initializing Judo SDB") do
         sdb.create_domain(base_domain)
       end
     end
 
-    def setup_security_group
-      begin
-        ec2.create_security_group('judo', 'Judo')
-        ec2.authorize_security_group_IP_ingress("judo", 22, 22,'tcp','0.0.0.0/0')
-      rescue Aws::AwsError => e
-        raise unless e.message =~ /InvalidGroup.Duplicate/
-      end
-    end
-
-    def setup_judo_config
-      if judo_dir and File.exists?("#{judo_dir}/config.yml")
-        puts "config already exists [#{judo_dir}/config.yml]"
-        return
-      end
-      raise JudoError, "You must specify a repo dir" unless repo
-      task("writing .judo/config.yml") do
-        Dir.chdir(repo) do
-          if File.exists?(".judo/config.yml")
-            puts ".judo folder already exists"
-          else
-            system "mkdir .judo"
-            File.open(".judo/config.yml","w") do |f|
-              f.write({ "access_id" => access_id, "access_secret" => access_secret, "s3_bucket" => bucket_name }.to_yaml)
-            end
-          end
+    def init_security_group
+      task("Initializing Judo Security Group") do
+        begin
+          ec2.create_security_group('judo', 'Judo')
+          ec2.authorize_security_group_IP_ingress("judo", 22, 22,'tcp','0.0.0.0/0')
+        rescue Aws::AwsError => e
+          raise unless e.message =~ /InvalidGroup.Duplicate/
         end
       end
     end
 
-    def setup_repo
-      if File.exists?("#{repo}/default")
-        puts "default group already exists [#{repo}/default]"
-        return
-      end
-      task("Setting up default group") do
-        FileUtils.cp_r(default_group_dir, repo)
-        get_group("default").compile
+    def init_keypair
+      task("Initializing Judo Keypair") do
+        ec2.delete_key_pair("judo")
+        material = ec2.create_key_pair("judo")[:aws_material]
+        s3_put("judo.pem", material)
       end
     end
 
     def keypair_file(&blk)
-      Tempfile.open("judo_pem") do |file|
-        file.write key_material
+      Tempfile.open("judo.pem") do |file|
+        file.write(s3_get("judo.pem"))
         file.flush
         blk.call(file.path)
       end
     end
 
-    def setup_bucket
-      if name = get("bucket_name")
-        puts "Bucket #{name} already set"
-      else
-        puts "Setting bucket name #{bucket_name}"
-        set_bucket_name(bucket_name)
-      end
+    def set_db_version(new_version)
+      update "dbversion" => new_version
     end
 
-    def setup_keypair
-      if @key_name and @key_material
-        task("Setting keypair #{@key_name}") do
-          set_keypair(@key_name, @key_material)
-        end
-      elsif @key_create or not key_name
-        task("Generating an ssl keypair") do
-          name = "judo#{ec2.describe_key_pairs.map { |k| k[:aws_key_name] }.map { |k| k =~ /^judo(\d*)/; $1.to_i }.sort.last.to_i + 1}"
-          material = ec2.create_key_pair(name)[:aws_material]
-          set_keypair(name, material)
-        end
-      else
-        puts "Keypair #{key_name} already set"
-      end
+    def get_db_version
+      get("dbversion").to_i
     end
 
-    def default_config
-        <<DEFAULT
-{
-  "ami32":"ami-2d4aa444", // public ubuntu 10.04 ami - 32 bit
-  "ami64":"ami-fd4aa494", // public ubuntu 10.04 ami - 64 bit
-  "user":"ubuntu",
-  "security_group":"judo",
-  "availability_zone":"us-east-1d"
-}
-DEFAULT
+    def ensure_db_version
+      case get_db_version
+      when 0
+        task("Upgrading Judo SDB from version 0 to 2") do
+          sdb.create_domain(server_domain)
+          sdb.create_domain(snapshot_domain)
+          set_db_version(2)
+        end
+      when 1
+        task("Upgrading Judo SDB from version 1 to 2") do
+          sdb.create_domain(snapshot_domain)
+          set_db_version(2)
+        end
+      when 2
+        # current version
+      else
+        raise JudoError, "Judo SDB has higher version (#{get_db_version}) " +
+                         "than current gem (2) - please upgrade Judo"
+      end
     end
   end
 end

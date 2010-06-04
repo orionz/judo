@@ -2,13 +2,11 @@
 
 require 'optparse'
 require File.dirname(__FILE__) + '/../lib/judo'
-require File.dirname(__FILE__) + '/../lib/judo/commandline_helpers'
+require File.dirname(__FILE__) + '/../lib/judo/cli_helpers'
 
-include JudoCommandLineHelpers
+include Judo::CLIHelpers
 
-defaults = Judo::Base.defaults(Dir.pwd)
-
-options = {}
+options = Judo::Base.defaults
 
 ARGV.unshift "-h" if ARGV.size == 0
 
@@ -52,18 +50,14 @@ Usage: judo launch [options] SERVER ...
 
 banner
 
-  # start stop create destroy launch restart info console
-  # list volumes ips
-
-  opts.on( '-c', '--config DIR', 'Specify the location of the config dir' ) do |dir|
-    defaults[:judo_dir] = dir
-    defaults.merge(Judo::Base.defaults(Dir.pwd, dir))
+  opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|
+    options[:access_id] = id
+  end
+  opts.on( '-s', '--secret KEY', 'Specify the AWS access secret key' ) do |key|
+    options[:access_secret] = key
   end
   opts.on( '-f', '--force', 'Force a stop or restart (immediately force detach volumes)' ) do
     options[:force] = true
-  end
-  opts.on( '-r', '--repo DIR', 'Specify the location of the repo dir' ) do |dir|
-    options[:repo] = dir
   end
   opts.on( '-t', '--type TYPE', 'Specify an instance type different from the config on server start' ) do |type|
     options[:instance_type] = type
@@ -79,25 +73,6 @@ banner
   opts.on( '-i', '--ip IP', 'Specify an exsiting elastic_ip address on server creation' ) do |ip|
     options[:elastic_ip] = ip
   end
-  opts.on( '-a', '--accessid ID', 'Specify the AWS access ID' ) do |id|
-    options[:access_id] = id
-  end
-  opts.on( '-k', '--keypair KEY', 'Speicy the AWS keypair pem file to use or \'create\'' ) do |key|
-    if key == 'create'
-      options[:key_create] = true
-    elsif File.basename(key) =~ /(.*)[.]pem$/
-      options[:key_name] = $1
-      options[:key_material] = File.new(key).read
-    else
-      abort "Key file must be KEY_NAME.pem"
-    end
-  end
-  opts.on( '-s', '--secret KEY', 'Specify the AWS access secret key' ) do |key|
-    options[:access_secret] = key
-  end
-  opts.on( '-b', '--bucket BUCKET', 'Specify the AWS S3 bucket to use' ) do |bucket|
-    options[:bucket] = bucket
-  end
   opts.on( '-v', '--version VERSION', 'Update the servers config version on create/start/launch' ) do |version|
     options[:version] = version
   end
@@ -110,31 +85,27 @@ end
 optparse.parse!
 
 action = ARGV.shift
-judo = Judo::Base.new(defaults.merge(options))
-judo.check_version if action != "setup"
+judo = Judo::Base.new(options)
+judo.ensure_setup unless action == "generate"
 
 begin
   case action
-    when "setup" then judo.setup
-    when "ips" then do_ips(judo)
-    when "volumes" then do_volumes(judo)
-    when "list" then do_list(judo, ARGV)
-    when "groups" then do_groups(judo)
-    when "watch" then each_server(judo, ARGV)        { |s| s.ssh_command("tail -n 1000 -f /var/log/kuzushi.log") }
-    when "info" then each_server(judo, ARGV)         { |s| do_info(judo, s) }
-    when "console" then each_server(judo, ARGV)      { |s| puts s.console_output }
-    when "commit" then mk_groups(judo, ARGV)         { |g| g.compile }
-    when "ssh" then each_server(judo, ARGV)          { |s| s.connect_ssh }
-    when "start" then each_server(judo, ARGV)        { |s| s.start(options) }
-    when "restart" then each_server(judo, ARGV)      { |s| s.restart(options) }
-    when "stop" then each_server(judo, ARGV)         { |s| s.stop(options) }
-    when "create" then mk_servers(judo, options, ARGV, false)
-    when "launch" then mk_servers(judo, options, ARGV, true)
-    when "snapshots" then do_snapshots(judo, ARGV)
-    when "config" then
-      puts "Judo DB Version: #{judo.db_version}"
-      puts "Judo Key Pair:   #{judo.key_name}"
-      puts "Judo Bucket:     #{judo.bucket_name}"
+    when "generate"  then do_generate(judo, ARGV)
+	  when "commit"    then do_commit(judo, ARGV)
+    when "ips"       then do_ips(judo)
+    when "volumes"   then do_volumes(judo)
+    when "list"      then do_list(judo, ARGV)
+    when "groups"    then do_groups(judo)
+	  when "snapshots" then do_snapshots(judo, ARGV)
+    when "watch"     then each_server(judo, ARGV) { |s| s.ssh_command("tail -n 1000 -f /var/log/kuzushi.log") }
+    when "info"      then each_server(judo, ARGV) { |s| do_info(judo, s) }
+    when "console"   then each_server(judo, ARGV) { |s| puts s.console_output }
+    when "ssh"       then each_server(judo, ARGV) { |s| s.connect_ssh }
+    when "start"     then each_server(judo, ARGV) { |s| s.start(options) }
+    when "restart"   then each_server(judo, ARGV) { |s| s.restart(options) }
+    when "stop"      then each_server(judo, ARGV) { |s| s.stop(options) }
+    when "create"    then mk_servers(judo, options, ARGV, false)
+    when "launch"    then mk_servers(judo, options, ARGV, true)
     when "rename" then
       raise JudoError, "usage: judo rename SERVER SERVER" unless ARGV.size == 2
       server = judo.find_server(ARGV[0]).rename(ARGV[1])

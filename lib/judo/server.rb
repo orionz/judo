@@ -366,15 +366,12 @@ module Judo
     end
 
     def launch_ec2
-#      validate
-
-      ## EC2 launch_instances
       ud = user_data
       debug(ud)
       result = @base.ec2.launch_instances(ami,
         :instance_type => instance_type,
         :availability_zone => config["availability_zone"],
-        :key_name => @base.key_name,
+        :key_name => "judo",
         :group_ids => security_groups,
         :user_data => ud).first
       update "instance_id" => result[:aws_instance_id], "virgin" => false, "started_at" => Time.now.to_i
@@ -547,22 +544,6 @@ module Judo
 
     def url
       group.s3_url(version)
-    end
-
-    def validate
-      ### EC2 create_security_group
-      @base.create_security_group
-
-      ### EC2 desctibe_key_pairs
-      k = @base.ec2.describe_key_pairs.detect { |kp| kp[:aws_key_name] == config["key_name"] }
-
-      if k.nil?
-        if config["key_name"] == "judo"
-          @base.create_keypair
-        else
-          raise "cannot use key_pair #{config["key_name"]} b/c it does not exist"
-        end
-      end
     end
 
     def snapshot(name)
