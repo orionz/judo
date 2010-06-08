@@ -16,4 +16,4 @@ require File.dirname(__FILE__) + '/judo/base'
 require File.dirname(__FILE__) + '/judo/group'
 require File.dirname(__FILE__) + '/judo/server'
 require File.dirname(__FILE__) + '/judo/snapshot'
-
+require File.dirname(__FILE__) + '/judo/patch'

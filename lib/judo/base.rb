@@ -187,7 +187,7 @@ module Judo
     end
 
     def ec2_snapshots
-      @ec2_snapshots ||= ec2.describe_snapshots
+      @ec2_snapshots ||= ec2.describe_snapshots([], :owner => "self")
     end
 
     def ec2_instances
