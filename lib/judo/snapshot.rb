@@ -77,7 +77,7 @@ module Judo
     end
 
     def delete
-      ### TODO - wait for snapshotting to finish
+      raise JudoError, "cannot delete, snapshotting not complete" unless completed?
       @base.sdb.delete_attributes(@base.snapshot_domain, name)
       server.remove("snapshots", name) if server
     end
