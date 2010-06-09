@@ -222,7 +222,6 @@ module Judo
             size = volume_config["size"]
             if not volumes[device]
               task("Creating EC2 Volume #{device} #{size}") do
-                ### EC2 create_volume
                 volume_id = @base.ec2.create_volume(nil, size, config["availability_zone"])[:aws_id]
                 add_volume(volume_id, device)
               end
@@ -239,7 +238,6 @@ module Judo
     def allocate_ip
       begin
         if config["elastic_ip"] and not elastic_ip
-          ### EC2 allocate_address
           task("Adding an elastic ip") do
             ip = @base.ec2.allocate_address
             add_ip(ip)
@@ -290,7 +288,6 @@ module Judo
 
     def destroy
       stop if running?
-      ### EC2 release_address
       task("Deleting Elastic Ip") { remove_ip } if has_ip?
       volumes.each { |dev,v| remove_volume(v,dev) }
       task("Destroying server #{name}") { delete }
@@ -301,7 +298,6 @@ module Judo
     end
 
     def ec2_instance
-      ### EC2 describe_instances
       @base.ec2_instances.detect { |e| e[:aws_instance_id] == instance_id } or {}
     end
 
@@ -467,7 +463,6 @@ module Judo
 
     def attach_ip
       return unless running? and elastic_ip
-      ### EC2 associate_address
       @base.ec2.associate_address(instance_id, elastic_ip)
     end
 
@@ -482,14 +477,12 @@ module Judo
     def attach_volumes
       return unless running?
       volumes.each do |device,volume_id|
-        ### EC2 attach_volume
         @base.ec2.attach_volume(volume_id, instance_id, device)
       end
     end
 
     def remove_volume(volume_id, device)
       task("Deleting #{device} #{volume_id}") do
-        ### EC2 delete_volume
         @base.ec2.delete_volume(volume_id)
         remove "volumes", "#{device}:#{volume_id}"
       end
