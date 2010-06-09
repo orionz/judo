@@ -121,7 +121,8 @@ module Judo
     end
 
     def progress
-      "#{(ec2_data.inject(0) { |sum,a| sum + a[:aws_progress].to_i } / ec2_data.size).to_i}%"
+      min_percent = ec2_data.map { |s| s[:aws_progress].to_i }.min
+      "#{min_percent}%"
     end
 
     def size(snap_id)
