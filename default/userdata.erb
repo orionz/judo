@@ -21,7 +21,6 @@
 ##   id - this is random string that uniqily identifies the server for its lifetime
 ##   name - the name of the server
 ##   group_name - the name of group the server is in
-##   secret - this is a 128bit random string assigned to an instance at creation time - great for passwords
 ##   metadata - a hash of metadata associated with the server with --data KEY=VALUE
 ##   boot - a hash of boot options passed to the server with --boot KEY=VALUE
 ##   first_boot? - is set to true or false depending on if this is the instance's first boot
@@ -32,7 +31,6 @@ set -x
 
 export JUDO_ID='<%= id %>'
 export JUDO_NAME='<%= name %>'
-export JUDO_SECRET='<%= secret %>'
 export JUDO_FIRST_BOOT='<%= first_boot? %>'
 
 hostname <%= name %>

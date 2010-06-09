@@ -28,8 +28,8 @@ module Judo
       task("Creating server #{name}") do
         update("name" => name,         "group" => group_name,
                "virgin" => virgin,     "elastic_ip" => ip,
-               "secret" => new_secret, "version" => version,
-               "clone" => clone,       "created_at" => Time.now.to_i)
+               "version" => version,   "clone" => clone,
+               "created_at" => Time.now.to_i)
         set_metadata(metadata) if metadata
         @base.sdb.put_attributes(@base.base_domain, "groups", group_name => id)
       end
@@ -137,10 +137,6 @@ module Judo
 
     def virgin?
       get("virgin").to_s == "true"  ## I'm going to set it to true and it will come back from the db as "true" -> could be "false" or false or nil also
-    end
-
-    def secret
-      get "secret"
     end
 
     def snapshots
@@ -586,10 +582,6 @@ module Judo
 
     def <=>(s)
       [group.to_s, name.to_s] <=> [s.group.to_s, s.name.to_s]
-    end
-
-    def new_secret
-      rand(2 ** 128).to_s(36)
     end
 
     def group_name
