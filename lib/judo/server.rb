@@ -508,14 +508,14 @@ module Judo
     def ssh_command(cmd)
       wait_for_ssh
       @base.keypair_file do |file|
-        system "ssh -i #{file} #{config["user"]}@#{hostname} '#{cmd}'"
+        system "ssh -q -i #{file} #{config["user"]}@#{hostname} '#{cmd}'"
       end
     end
 
     def connect_ssh
       wait_for_ssh
       @base.keypair_file do |file|
-        system "ssh -i #{file} #{config["user"]}@#{hostname}"
+        system "ssh -q -i #{file} #{config["user"]}@#{hostname}"
       end
     end
 
