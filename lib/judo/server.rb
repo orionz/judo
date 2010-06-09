@@ -10,25 +10,22 @@ module Judo
 
     def create(name, options)
       raise JudoError, "group '#{group_name}' does not exists" unless group
-
-      options[:virgin] = true if options[:virgin].nil?
-
-      snapshots  = options[:snapshots]
-      metadata   = options[:metadata]
-      ip         = options[:elastic_ip]  ## if the ip was allocated beforehand
-      virgin     = options[:virgin]      ## should the server init?
-      clone      = options[:clone]       ## if it was cloned from a snapshot
-
-      version = options[:version]
-      version ||= group.version
-
       raise JudoError, "there is already a server named #{name}" if @base.servers.detect { |s| s.name == name and s != self}
       raise JudoError, "there is already a server with id #{id}" if @base.servers.detect { |s| s.id == id and s != self}
+
+      virgin        = !(options[:virgin] == false)
+      snapshots     = options[:snapshots]
+      metadata      = options[:metadata]
+      ip            = options[:elastic_ip]
+      clone         = options[:clone]
+      instance_type = options[:instance_type]
+      version       = options[:version] || group.version
 
       task("Creating server #{name}") do
         update("name" => name,         "group" => group_name,
                "virgin" => virgin,     "elastic_ip" => ip,
                "version" => version,   "clone" => clone,
+               "instance_type" => instance_type,
                "created_at" => Time.now.to_i)
         set_metadata(metadata) if metadata
         @base.sdb.put_attributes(@base.base_domain, "groups", group_name => id)
@@ -181,8 +178,7 @@ module Judo
 ######## end simple DB access  #######
 
     def instance_type
-     ## need instance_size to be backward compatible - needed for configs made before v 0.3.0
-     get("instance_type") || config["instance_type"] || config["instance_size"] || "m1.small"
+     get("instance_type")
     end
 
     def config

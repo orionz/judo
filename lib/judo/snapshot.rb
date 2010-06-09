@@ -73,7 +73,7 @@ module Judo
       raise JudoError, "cannot animate, snapshotting not complete" unless completed?
       @base.create_server(new_server, group_name,
         :version => version, :snapshots => devs, :virgin => virgin,
-        :metadata => metadata , :clone => name)
+        :metadata => metadata , :clone => name, :instance_type => server.instance_type)
     end
 
     def delete
