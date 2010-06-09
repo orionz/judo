@@ -1,6 +1,6 @@
 module Judo
   class Server
-    attr_accessor :id
+    attr_accessor :base, :id
 
     def initialize(base, id, group, version = nil)
       @base = base
