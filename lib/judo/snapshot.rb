@@ -1,13 +1,4 @@
 module Judo
-  ### sdb
-  ### name {
-  ###   "version"    => [ server.version ],
-  ###   "devs"       => [ "/dev/sde1:snap-abc123", "/dev/sde2:snap-abc456" ],
-  ###   "server"     => server.id
-  ###   "group"      => server.group.name
-  ###   "virgin"     => server.virgin
-  ###   "data"       => server.data
-  ###   "created_at" => unixtime
   class Snapshot
     attr_accessor :name, :server_id
 
