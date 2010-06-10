@@ -436,17 +436,21 @@ module Judo
       end
     end
 
+    def ssh?
+      begin
+        Timeout::timeout(2) do
+          TCPSocket.new(hostname, 22)
+          true
+        end
+      rescue SocketError, Timeout::Error, Errno::ECONNREFUSED, Errno::EHOSTUNREACH
+        false
+      end
+    end
+
     def wait_for_ssh
       invalid "not running" unless running?
       loop do
-        begin
-          reload
-          Timeout::timeout(4) do
-            TCPSocket.new(hostname, 22)
-            return
-          end
-        rescue SocketError, Timeout::Error, Errno::ECONNREFUSED, Errno::EHOSTUNREACH
-        end
+        ssh? ? return : sleep(1)
       end
     end
 
