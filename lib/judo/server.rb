@@ -1,11 +1,11 @@
 module Judo
   class Server
-    attr_accessor :base, :id
+    attr_accessor :base, :id, :group_name
 
-    def initialize(base, id, group, version = nil)
+    def initialize(base, id, group_name, version = nil)
       @base = base
       @id = id
-      @group = group
+      @group_name = group_name
     end
 
     def create(name, options)
@@ -28,7 +28,6 @@ module Judo
                "instance_type" => instance_type,
                "created_at" => Time.now.to_i)
         set_metadata(metadata) if metadata
-        @base.sdb.put_attributes(@base.base_domain, "groups", group_name => id)
       end
 
       allocate_disk(snapshots)
@@ -57,7 +56,7 @@ module Judo
     end
 
     def group
-      @group_obj ||= @base.groups.detect { |g| g.name == @group }
+      @group ||= @base.groups.detect { |g| g.name == @group_name }
     end
 
     def fetch_state
@@ -171,7 +170,6 @@ module Judo
     end
 
     def delete
-      group.delete_server(self) if group
       @base.sdb.delete_attributes(@base.server_domain, id)
     end
 
@@ -571,10 +569,6 @@ module Judo
 
     def <=>(s)
       [group.to_s, name.to_s] <=> [s.group.to_s, s.name.to_s]
-    end
-
-    def group_name
-      @group
     end
 
     def boot

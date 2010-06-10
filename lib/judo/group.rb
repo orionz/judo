@@ -19,12 +19,8 @@ module Judo
       (@config ||= {})[version] ||= load_config(version)
     end
 
-    def server_ids
-      @server_ids ||= (@base.groups_config[@name] || [])
-    end
-
     def servers
-      @base.servers.select { |s| server_ids.include?(s.id) }
+      @base.servers.select { |s| s.group_name == name }
     end
 
     def load_userdata(version)
@@ -87,16 +83,13 @@ module Judo
     end
 
     def destroy
-      servers.each { |s| s.destroy }
-      @base.task("Destring #{self}") do
+      @base.task("Destroying servers in group #{self}") do
+        servers.each { |s| s.destroy }
+      end
+      @base.task("Destroying group #{self}") do
         @base.groups.delete(self)
-        @base.sdb.delete_attributes(@base.base_domain, "groups", [ name ])
         @base.sdb.delete_attributes(@base.base_domain, "group_versions", [ name ])
       end
-    end
-
-    def delete_server(server)
-      @base.sdb.delete_attributes(@base.base_domain, "groups", name => server.id)
     end
 
     def displayname

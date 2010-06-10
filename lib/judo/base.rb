@@ -198,10 +198,6 @@ module Judo
       @ec2 ||= Aws::Ec2.new(access_id, access_secret, :logger => Logger.new(nil))
     end
 
-    def groups_config
-      @groups_config ||= sdb.get_attributes(base_domain, "groups")[:attributes]
-    end
-
     def group_versions
       @group_version ||= sdb.get_attributes(base_domain, "group_versions")[:attributes]
     end
