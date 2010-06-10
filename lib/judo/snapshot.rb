@@ -65,7 +65,6 @@ module Judo
           "group" => server.group.name,
           "created_at" => Time.now.to_i.to_s
         }, :replace)
-        server.add "snapshots", name
       end
     end
 
@@ -79,7 +78,6 @@ module Judo
     def delete
       raise JudoError, "cannot delete, snapshotting not complete" unless completed?
       @base.sdb.delete_attributes(@base.snapshot_domain, name)
-      server.remove("snapshots", name) if server
     end
 
     def get(key)
