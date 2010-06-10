@@ -301,7 +301,7 @@ module Judo
     end
 
     def start(options = {})
-      @boot= options[:boot]
+      @boot = options[:boot]
       new_version = options[:version]
       set_instance_type(options[:instance_type]) if options[:instance_type]
 
