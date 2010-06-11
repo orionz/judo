@@ -288,7 +288,7 @@ module Judo
     end
 
     def ec2_state
-      ec2_instance[:aws_state] rescue "offline"
+      ec2_instance[:aws_state]
     end
 
     def ec2_instance
